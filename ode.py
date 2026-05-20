@@ -13,15 +13,20 @@ alpha = HDI.copy()
 # beta_i, np array size of N with 0.0002 value
 beta = np.full(N, 0.002)
 
+# To do: pass heat to update the graph
+
+rng = np.random.default_rng(42)
+
+HDI = rng.random(N)
+
+
 # delta_i
 delta = np.full(N, 0.03)
 # Smaller timestep for stability
 #DT = 1e-5
-HDI = rng.random(N)
 
 #noise_scale = 1.0 # X_i randomness
 
-rng = np.random.default_rng(42)
 
 dt = 0.01
 
@@ -75,7 +80,8 @@ def ode_step(xC, xP):
                 continue
 
             # gamma_i,j
-
+            # gamma_ij = gamma_base / D[i, j]  # e.g. gamma_base = 0.001
+            # theta_ij = theta_base / D[i, j]
             gamma_ij = (
                 xP[i] - xP[j]
             ) / D[i, j]
@@ -153,7 +159,10 @@ def ode_step(xC, xP):
 
     newP = np.maximum(newP, 0)
 
-    return newC, newP # new equations for criminal and police
+    heat = np.where(dP != 0, dC / dP, 0).reshape(ROWS, COLS) # dx Ci / dx Pi 
+    # determine heat based on this in the future
+
+    return newC, newP, heat # new equations for criminal and police
 
 
 # distance matrix/vector - d(i,j)
