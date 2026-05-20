@@ -16,12 +16,16 @@ beta = np.full(N, 0.002)
 # delta_i
 delta = np.full(N, 0.03)
 # Smaller timestep for stability
-DT = 1e-5
+#DT = 1e-5
 HDI = rng.random(N)
 
-noise_scale = 1.0 # X_i randomness
+#noise_scale = 1.0 # X_i randomness
 
 rng = np.random.default_rng(42)
+
+dt = 0.01
+
+sigma = 0.00
 
 
 positions = []
@@ -40,17 +44,22 @@ def ode_step(xC, xP):
 
     dP = np.zeros(N)
 
-    # RANDOM IMPULSE DRIVEN CRIME TERM - X_i, we just assign random for now
+    # RANDOM IMPULSE DRIVEN CRIME TERM - X_i, we just assign random for now -> replaced wotj randomness_term
 
-    X = rng.normal(
-        0,
-        noise_scale,
-        N
-    )
+    #X = rng.normal(
+    #    0,
+    #    noise_scale,
+    #    N
+    #)
 
     # MAIN LOOP
 
     for i in range(N):
+        # make sure coefficients regional
+
+        randomness_term = sigma * np.sqrt(dt) * np.random.normal(0, 1) # regenerated in every step
+
+        Ri = 0.0 # police recruitment in region i
 
         criminal_in = 0.0
 
@@ -107,18 +116,21 @@ def ode_step(xC, xP):
 
         dC[i] = (
 
-            alpha[i] * X[i]
+            (alpha[i] * xC[i]
 
             - beta[i] * xC[i] * xP[i]
 
             + criminal_in
 
-            - criminal_out
+            - criminal_out) * dt 
+            +  randomness_term
         )
 
         # x'P,i - police equation
 
         dP[i] = (
+            
+            Ri
 
             - delta[i] * xP[i]
 
@@ -131,9 +143,9 @@ def ode_step(xC, xP):
 
     # EULER INTEGRATION, small step DT -> next sec in time kinda
 
-    newC = xC + DT * dC
+    newC = xC + dC
 
-    newP = xP + DT * dP
+    newP = xP + dt*dP
 
     # non-neg densities -> can't have -10 criminals for example
 
