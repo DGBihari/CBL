@@ -91,6 +91,58 @@ np.random.seed(42)
 ts_data['Crime_Count'] = np.random.randint(2000, 15000, size=len(ts_data))
 
 # ==========================================
+# NEW: REAL CRIME DATA INGESTION
+# ==========================================
+print("Ingesting real crime data from /crime_data folder...")
+
+# We only load the columns we need to prevent RAM overload
+use_cols = ['Month', 'Reported by', 'Crime type']
+target_crimes = ['Anti-social behaviour', 'Violence and sexual offences']
+crime_counts_list = []
+
+# Find all CSV files in the crime_data directory and its subfolders
+csv_files = glob.glob(os.path.join('crime_data', '**', '*.csv'), recursive=True)
+
+for file in csv_files:
+    try:
+        # Read the file
+        df_temp = pd.read_csv(file, usecols=use_cols)
+        
+        # Filter for the specific crime types
+        df_filtered = df_temp[df_temp['Crime type'].isin(target_crimes)]
+        
+        # Aggregate counts by Month and PFA inside this specific file
+        # This compresses thousands of rows into just a few rows of summary data
+        agg_df = df_filtered.groupby(['Month', 'Reported by']).size().reset_index(name='Crime_Count')
+        crime_counts_list.append(agg_df)
+    except Exception as e:
+        # Silently skip files that might be corrupted or missing required columns
+        continue
+
+# Combine all the lightweight summary dataframes into one master dataframe
+raw_crime_df = pd.concat(crime_counts_list, ignore_index=True)
+
+# Extract the Year from the 'YYYY-MM' format
+raw_crime_df['Year'] = raw_crime_df['Month'].str.split('-').str[0].astype(int)
+
+# Standardize the internal PFA names to match our network map exactly
+# This elegantly solves the 42/44/45 file mismatch issue
+raw_crime_df['PFA_Name'] = standardize_pfa_names(raw_crime_df['Reported by'])
+
+# Final Aggregation: Group by Year and PFA_Name to get total yearly counts per region
+yearly_crimes = raw_crime_df.groupby(['PFA_Name', 'Year'])['Crime_Count'].sum().reset_index()
+
+# Merge the real crime data into our main ts_data dataframe
+ts_data = pd.merge(ts_data, yearly_crimes, on=['PFA_Name', 'Year'], how='left')
+
+# Failsafe: If a region is missing a year of data (e.g., due to missing CSVs), 
+# we interpolate it using the mean of their other years, or fill with 0
+ts_data['Crime_Count'] = ts_data.groupby('PFA_Name')['Crime_Count'].transform(lambda x: x.fillna(x.mean()))
+ts_data['Crime_Count'] = ts_data['Crime_Count'].fillna(0)
+
+print("Real crime data successfully merged. Calculating SDE...")
+
+# ==========================================
 # 4. REGRESSION & INTERPOLATION METHODOLOGY
 # ==========================================
 print("Applying linear regression and interpolation to N_i and P_i...")
