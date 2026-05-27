@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import geopandas as gpd
 import warnings
+import glob 
+import os    
 
 # Suppress geometry warnings for clean terminal output
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -20,11 +22,22 @@ police_areas = gpd.read_file('police_areas.geojson')
 # Aggressive Sanitization Function
 def standardize_pfa_names(series):
     series = series.astype(str).str.strip().str.replace('\n', '', regex=True)
+    
+    # Strip out the formal suffixes from the raw UK Police data
+    series = series.str.replace(' Police', '', regex=False)
+    series = series.str.replace(' Constabulary', '', regex=False)
+    series = series.str.replace(' Service', '', regex=False)
+    
     # Fix minor mismatches across government datasets
     series.loc[series.str.contains('Hampshire', case=False, na=False)] = 'Hampshire and Isle of Wight'
     series.loc[series.str.contains('Devon', case=False, na=False)] = 'Devon and Cornwall'
-    # NOTE: 'London, City of' is intentionally left alone here so it does not 
-    # merge with the Metropolitan Police, preventing the duplication bug.
+    
+    # The Two Londons Fix:
+    series.loc[series.str.contains('Metropolitan', case=False, na=False)] = 'Metropolitan Police'
+    
+    # Force the crime data's "City of London" to match the map's "London, City of"
+    series.loc[series.str.contains('City of London', case=False, na=False)] = 'London, City of'
+    
     return series
 
 # Clean the Map Data
@@ -86,38 +99,42 @@ ts_data = pd.merge(pfa_agg, police_df, on=['PFA_Name', 'Year'], how='left')
 ts_data['Area_Sq_Km'] = ts_data['Area_Sq_Km'].replace(0, np.nan).fillna(ts_data['Area_Sq_Km'].mean())
 ts_data['IMD_Score'] = ts_data['IMD_Score'].fillna(ts_data['IMD_Score'].mean())
 
-# MOCK CRIME GENERATION (Replace this block once your real crime dataset is ready to merge)
-np.random.seed(42)
-ts_data['Crime_Count'] = np.random.randint(2000, 15000, size=len(ts_data))
-
 # ==========================================
 # NEW: REAL CRIME DATA INGESTION
 # ==========================================
-print("Ingesting real crime data from /crime_data folder...")
+print("Ingesting real crime data from /csv/crime_data folder...")
 
-# We only load the columns we need to prevent RAM overload
 use_cols = ['Month', 'Reported by', 'Crime type']
 target_crimes = ['Anti-social behaviour', 'Violence and sexual offences']
 crime_counts_list = []
 
-# Find all CSV files in the crime_data directory and its subfolders
-csv_files = glob.glob(os.path.join('crime_data', '**', '*.csv'), recursive=True)
+# STRICT FILTER: Only target the files ending in 'street.csv' to avoid court outcomes
+search_pattern = os.path.join('csv/crime_data', '**', '*street.csv')
+csv_files = glob.glob(search_pattern, recursive=True)
+
+print(f"Found {len(csv_files)} CSV files. Beginning processing...")
+
+if len(csv_files) == 0:
+    raise FileNotFoundError("Python found 0 files. Check if the 'csv/crime_data' folder is in the exact same directory as run_sde_pipeline.py.")
 
 for file in csv_files:
     try:
-        # Read the file
         df_temp = pd.read_csv(file, usecols=use_cols)
-        
-        # Filter for the specific crime types
         df_filtered = df_temp[df_temp['Crime type'].isin(target_crimes)]
-        
-        # Aggregate counts by Month and PFA inside this specific file
-        # This compresses thousands of rows into just a few rows of summary data
         agg_df = df_filtered.groupby(['Month', 'Reported by']).size().reset_index(name='Crime_Count')
-        crime_counts_list.append(agg_df)
+        
+        # Only append if the file actually contained relevant crimes
+        if not agg_df.empty:
+            crime_counts_list.append(agg_df)
+            
     except Exception as e:
-        # Silently skip files that might be corrupted or missing required columns
+        # Instead of failing silently, print the exact error for the first few files
+        print(f"FAILED on file {file} - Error: {e}")
         continue
+
+# Failsafe check before concatenating
+if len(crime_counts_list) == 0:
+    raise ValueError("Files were found, but no data could be extracted. Read the FAILED error messages above to see why.")
 
 # Combine all the lightweight summary dataframes into one master dataframe
 raw_crime_df = pd.concat(crime_counts_list, ignore_index=True)
@@ -126,7 +143,6 @@ raw_crime_df = pd.concat(crime_counts_list, ignore_index=True)
 raw_crime_df['Year'] = raw_crime_df['Month'].str.split('-').str[0].astype(int)
 
 # Standardize the internal PFA names to match our network map exactly
-# This elegantly solves the 42/44/45 file mismatch issue
 raw_crime_df['PFA_Name'] = standardize_pfa_names(raw_crime_df['Reported by'])
 
 # Final Aggregation: Group by Year and PFA_Name to get total yearly counts per region
@@ -135,8 +151,6 @@ yearly_crimes = raw_crime_df.groupby(['PFA_Name', 'Year'])['Crime_Count'].sum().
 # Merge the real crime data into our main ts_data dataframe
 ts_data = pd.merge(ts_data, yearly_crimes, on=['PFA_Name', 'Year'], how='left')
 
-# Failsafe: If a region is missing a year of data (e.g., due to missing CSVs), 
-# we interpolate it using the mean of their other years, or fill with 0
 ts_data['Crime_Count'] = ts_data.groupby('PFA_Name')['Crime_Count'].transform(lambda x: x.fillna(x.mean()))
 ts_data['Crime_Count'] = ts_data['Crime_Count'].fillna(0)
 
@@ -176,7 +190,12 @@ ts_data['Delta_Police'] = ts_data.groupby('PFA_Name')['Police_Count'].diff().fil
 
 # Empirical Constants
 ts_data['Sigma_i'] = ts_data.groupby('PFA_Name')['Crime_Count'].transform('std') / ts_data['Area_Sq_Km']
-ts_data['Sigma_i'] = ts_data['Sigma_i'].fillna(0.5) 
+
+# NEW: The GMP Failsafe. Calculate the average volatility of the rest of the UK.
+# Then replace any corrupted 0s (like Greater Manchester) or NaNs with that national average.
+national_avg_sigma = ts_data.loc[ts_data['Sigma_i'] > 0, 'Sigma_i'].mean()
+ts_data['Sigma_i'] = ts_data['Sigma_i'].replace(0, national_avg_sigma).fillna(national_avg_sigma)
+
 ts_data['Gamma_i'] = 0.05 / (ts_data['Population'] / ts_data['Area_Sq_Km']) 
 ts_data['Alpha_i'] = ts_data['IMD_Score'] * 0.005
 
