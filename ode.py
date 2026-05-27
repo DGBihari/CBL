@@ -7,26 +7,22 @@ ROWS = 5
 COLS = 9
 N = ROWS * COLS # 45 ffields in grid
 
-# alpha_i - hdi and crime rate correlation factor
-alpha = HDI.copy()
-
-# beta_i, np array size of N with 0.0002 value
-beta = np.full(N, 0.002)
-
 # To do: pass heat to update the graph
 
 rng = np.random.default_rng(42)
 
 HDI = rng.random(N)
 
+# alpha_i - hdi and crime rate correlation factor
+alpha = HDI.copy()
+
+# beta_i, np array size of N with 0.0002 value
+beta = np.full(N, 0.002)
+
 
 # delta_i
 delta = np.full(N, 0.03)
 # Smaller timestep for stability
-#DT = 1e-5
-
-#noise_scale = 1.0 # X_i randomness
-
 
 dt = 0.01
 
@@ -47,24 +43,24 @@ def ode_step(xC, xP):
 
     dC = np.zeros(N)
 
-    dP = np.zeros(N)
+    dP = np.ze_c, x_p):
 
-    # RANDOM IMPULSE DRIVEN CRIME TERM - X_i, we just assign random for now -> replaced wotj randomness_term
+    d_c = np.zeros(N)
 
-    #X = rng.normal(
-    #    0,
-    #    noise_scale,
-    #    N
-    #)
+    d_p = np.zeros(N)
 
-    # MAIN LOOP
-
-    for i in range(N):
+    # RANDOM IMPULSE DRIVEN CRIME TERM - X_i, we just assign random for now -> replaced wotj randomness_termr i in range(N):
         # make sure coefficients regional
 
         randomness_term = sigma * np.sqrt(dt) * np.random.normal(0, 1) # regenerated in every step
 
         Ri = 0.0 # police recruitment in region i
+
+        criminal_in = 0.0
+
+        criminal_out = 0.0rng.normal(0, 1) # regenerated in every step
+
+        r_i = 0.0 # police recruitment in region i
 
         criminal_in = 0.0
 
@@ -79,52 +75,51 @@ def ode_step(xC, xP):
             if i == j:
                 continue
 
-            # gamma_i,j
             # gamma_ij = gamma_base / D[i, j]  # e.g. gamma_base = 0.001
             # theta_ij = theta_base / D[i, j]
             gamma_ij = (
-                xP[i] - xP[j]
+                x_p[i] - x_p[j]
             ) / D[i, j]
 
             gamma_ji = (
-                xP[j] - xP[i]
+                x_p[j] - x_p[i]
             ) / D[j, i]
 
             # theta_i,j
 
             theta_ij = (
-                xC[i] - xC[j]
+                x_c[i] - x_c[j]
             ) / D[i, j]
 
             theta_ji = (
-                xC[j] - xC[i]
+                x_c[j] - x_c[i]
             ) / D[j, i]
 
             # coefficients from doc main equations, already treated as sums
 
             criminal_in += (
-                gamma_ji * xC[j]
+                gamma_ji * x_c[j]
             )
 
             criminal_out += (
-                gamma_ij * xC[i]
+                gamma_ij * x_c[i]
             )
 
             police_in += (
-                theta_ij * xP[j]
+                theta_ij * x_p[j]
             )
 
             police_out += (
-                theta_ji * xP[i]
+                theta_ji * x_p[i]
             )
 
         # x'C,i - criminals equation
 
-        dC[i] = (
+        d_c[i] = (
 
-            (alpha[i] * xC[i]
+            (alpha[i] * x_c[i]
 
-            - beta[i] * xC[i] * xP[i]
+            - beta[i] * x_c[i] * x_p[i]
 
             + criminal_in
 
@@ -134,13 +129,13 @@ def ode_step(xC, xP):
 
         # x'P,i - police equation
 
-        dP[i] = (
+        d_p[i] = (
             
-            Ri
+            r_i
 
-            - delta[i] * xP[i]
+            - delta[i] * x_p[i]
 
-            + beta[i] * xC[i] * xP[i]
+            + beta[i] * x_c[i] * x_p[i]
 
             + police_in
 
@@ -149,26 +144,20 @@ def ode_step(xC, xP):
 
     # EULER INTEGRATION, small step DT -> next sec in time kinda
 
-    newC = xC + dC
+    new_c = x_c + d_c
 
-    newP = xP + dt*dP
+    new_p = x_p + dt*d_p
 
     # non-neg densities -> can't have -10 criminals for example
 
-    newC = np.maximum(newC, 0)
+    new_c = np.maximum(new_c, 0)
 
-    newP = np.maximum(newP, 0)
+    new_p = np.maximum(new_p, 0)
 
-    heat = np.where(dP != 0, dC / dP, 0).reshape(ROWS, COLS) # dx Ci / dx Pi 
+    heat = np.where(d_p != 0, d_c / d_p, 0).reshape(ROWS, COLS) # dx Ci / dx Pi 
     # determine heat based on this in the future
 
-    return newC, newP, heat # new equations for criminal and police
-
-
-# distance matrix/vector - d(i,j)
-D = np.zeros((N, N))
-
-for i in range(N):
+    return new_c, new_p
 
     for j in range(N):
 

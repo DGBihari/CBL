@@ -45,16 +45,16 @@ N_rate = rng.uniform(0.001,  0.003,   N)   # civilian monthly growth rate
 P_rate = rng.uniform(0.002,  0.005,   N)   # police monthly growth rate
 
 # civilian pop in region i at time t
-def get_Ni(t: float) -> np.ndarray:
+def get_ni(t: float) -> np.ndarray:
     return N_civ0 * (1.0 + N_rate * t)
 
 # police pop in each region i at time t, scaled by police_mult 
-def get_Pi(t: float, police_mult: float = 1.0) -> np.ndarray:
+def get_pi(t: float, police_mult: float = 1.0) -> np.ndarray:
     return P_pol0 * (1.0 + P_rate * t) * police_mult
 
 # ── ODE step ──────────────────────────────────────────────────────────────────
 def ode_step(
-    xE: np.ndarray,
+    x_e: np.ndarray,
     t: float,
     alpha: np.ndarray = alpha_base,
     k: np.ndarray     = k_base,
@@ -65,7 +65,7 @@ def ode_step(
 
     Parameters
     
-    xE          : (N,) current monthly crime counts E_i
+    x_e         : (N,) current monthly crime counts E_i
     t           : current time in months
     alpha       : (N,) contagion rates (pass alpha_base * slider_val from UI) -> change UI values later or idk if we even need this slider
     k           : (N,) police efficiency (pass k_base * slider_val from UI)
@@ -73,47 +73,39 @@ def ode_step(
 
     Ret
     
-    newE : (N,)      updated crime counts after one dt step
-    dE   : (N,)      raw derivative dE_i/dt  — use this for the heatmap
-    heat : (ROWS, COLS)  dE reshaped; positive = rising crime, negative = falling
+    new_e : (N,)      updated crime counts after one dt step
+    d_e   : (N,)      raw derivative dE_i/dt  — use this for the heatmap
+    heat : (ROWS, COLS)  d_e reshaped; positive = rising crime, negative = falling
     """
-    Ni = get_Ni(t)
-    Pi = get_Pi(t, police_mult)
+    n_i = get_ni(t)
+    p_i = get_pi(t, police_mult)
 
-    neighbor_influence = ADJ @ (alpha * xE)   # sum alpha_j*E_j over bordering j; adj masking
-    police_ratio       = Pi / (Ni + Pi)        # in (0,1), diminishing returns
+    neighbor_influence = ADJ @ (alpha * x_e)   # sum alpha_j*E_j over bordering j; adj masking
+    police_ratio       = p_i / (n_i + p_i)        # in (0,1), diminishing returns
 
-    dE   = alpha * xE + neighbor_influence - k * xE * police_ratio
-    newE = np.maximum(xE + dE * dt, 0.0)
-    heat = dE.reshape(ROWS, COLS)             # hand this to the heatmap renderer
+    d_e   = alpha * x_e + neighbor_influence - k * x_e * police_ratio
+    new_e = np.maximum(x_e + d_e * dt, 0.0)
+    heat = d_e.reshape(ROWS, COLS)             # hand this to the heatmap renderer
 
-    return newE, dE, heat
+    return new_e, d_e, heat
 
 
 # eg
 if __name__ == "__main__":
-    xE = rng.uniform(50, 200, N)
+    x_e = rng.uniform(50, 200, N)
     t  = 0.0
 
     for step in range(10):
-        xE, dE, heat = ode_step(xE, t)
+        x_e, d_e, heat = ode_step(x_e, t)
         t += dt
-        print(f"t={t:.1f}  E_mean={xE.mean():.2f}  dE_mean={dE.mean():.4f}") # xE[i] current crime count in region i
+        print(f"t={t:.1f}  E_mean={x_e.mean():.2f}  dE_mean={d_e.mean():.4f}") # x_e[i] current crime count in region i
         # heat is ready to pass straight to ax.imshow() or equivalent
 
-        # crime
-        #crime_grid = xE.reshape(ROWS, COLS)
-        #print(np.round(crime_grid, 1))
-
         # civilian
-        Ni = get_Ni(t)
-        #population_grid = Ni.reshape(ROWS, COLS)
-        #print(np.round(population_grid))
+        n_i = get_ni(t)
 
         # police
-        Pi = get_Pi(t)
-        #police_grid = Pi.reshape(ROWS, COLS)
-        #print(np.round(police_grid))
+        p_i = get_pi(t)
 
         # compact table per region
         print("\nRegion Stats")
