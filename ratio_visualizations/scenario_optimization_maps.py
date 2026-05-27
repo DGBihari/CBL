@@ -1,50 +1,57 @@
-import os
 import geopandas as gpd
 import folium
 import pandas as pd
-import numpy as np
 
-# 1. Load the Police Boundaries
-geojson_path = '../police_areas.geojson'
-if not os.path.exists(geojson_path):
-    print(f"Error: Could not find '{geojson_path}'.")
-    exit()
+print("Loading data and cleaning map boundaries for optimization map...")
 
-police_areas = gpd.read_file(geojson_path)
+# 1. Load Data
+police_areas = gpd.read_file('../police_areas.geojson')
+ts_data = pd.read_csv('../time_series_master_calculated.csv')
 
-# Extract the actual police force names from the geojson to mock our simulation data
-# Note: 'pfa23nm' is the property key you identified in your heatmap.py
-police_force_names = police_areas['PFA24NM'].unique()
+# ==========================================
+# 🚨 BRUTE-FORCE GEOJSON NAMES 🚨
+# Overwrite any invisible characters directly in the map boundaries
+# ==========================================
+police_areas['PFA24NM'] = police_areas['PFA24NM'].astype(str).str.strip()
+police_areas.loc[police_areas['PFA24NM'].str.contains('Devon', case=False, na=False), 'PFA24NM'] = 'Devon and Cornwall'
+police_areas.loc[police_areas['PFA24NM'].str.contains('Hampshire', case=False, na=False), 'PFA24NM'] = 'Hampshire and Isle of Wight'
 
-# 2. Load/Mock the Optimized Simulation Data
-# In reality, this data comes from solving your SDEs and finding the best initial police distributions
-rng = np.random.default_rng(42)
-optimized_data = pd.DataFrame({
-    'Police_Force_Name': police_force_names,
-    # Mocking a low crime/police ratio for the "Coolest" scenario
-    'Optimized_Crime_Ratio': rng.uniform(2.0, 5.0, len(police_force_names)) 
-})
+# 2. Prepare 2025 CSV Data
+opt_data = ts_data[ts_data['Year'] == 2025].copy()
+opt_data['PFA_Name'] = opt_data['PFA_Name'].astype(str).str.strip()
 
-# 3. Initialize the Base Map
-uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
+# Fix City of London Map Hole
+met_data = opt_data[opt_data['PFA_Name'] == 'Metropolitan Police'].copy()
+met_data['PFA_Name'] = 'London, City of'
+opt_data = pd.concat([opt_data, met_data], ignore_index=True)
 
-# 4. Add the Choropleth layer based on your heatmap.py
+# ==========================================
+# 3. CALCULATE OPTIMIZATION LEVERAGE
+# ==========================================
+# Leverage Ratio: (Poverty Multiplier / Current Police Density)
+opt_data['Optimization_Leverage'] = (opt_data['IMD_Score'] * 0.005) / (opt_data['Police_Count'] / opt_data['Area_Sq_Km'])
+
+# Failsafe for NaN math to prevent black regions
+opt_data['Optimization_Leverage'] = opt_data['Optimization_Leverage'].fillna(0)
+opt_data = opt_data.drop_duplicates(subset=['PFA_Name'])
+
+# ==========================================
+# 4. RENDER MAP
+# ==========================================
+uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb dark_matter")
+
 folium.Choropleth(
     geo_data=police_areas,
-    name="Optimized Crime Heatmap",
-    data=optimized_data,
-    columns=["Police_Force_Name", "Optimized_Crime_Ratio"], 
-    key_on="feature.properties.PFA24NM", 
-    fill_color="YlOrRd", # Using the Yellow-Orange-Red palette
+    name="Intervention Leverage",
+    data=opt_data,
+    columns=["PFA_Name", "Optimization_Leverage"],
+    key_on="feature.properties.PFA24NM",
+    fill_color="YlOrRd", # Yellow to Red (Red = High Priority Intervention Zone)
     fill_opacity=0.8,
     line_opacity=0.3,
-    legend_name="Optimized Crime to Police Ratio"
+    legend_name="Resource Optimization Priority (2025)",
+    nan_fill_color="black" # Explicitly setting this so we know if a join fails
 ).add_to(uk_map)
 
-# Add layer control menu
-folium.LayerControl().add_to(uk_map)
-
-# Save the map
-output_file = 'optimized_coolest_map.html'
-uk_map.save(output_file)
-print(f"Optimization map saved to {output_file}")
+uk_map.save('optimized_leverage_map_2025.html')
+print("Saved Intervention Target Map to optimized_leverage_map_2025.html")

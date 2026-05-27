@@ -1,46 +1,216 @@
-PFA_Name,Police_Count,,,,
-Cleveland," 1,504 ",,,,
-Durham," 1,400 ",,,,
-Northumbria," 3,837 ",,,,
-Cheshire," 2,417 ",,,,
-Cumbria," 1,384 ",,,,
-Greater Manchester," 8,111 ",,,,
-Lancashire," 3,606 ",,,,
-Merseyside," 4,172 ",,,,
-Humberside," 2,284 ",,,,
-North Yorkshire," 1,656 ",,,,
-South Yorkshire," 3,040 ",,,,
-West Yorkshire," 6,130 ",,,,
-Derbyshire," 2,123 ",,,,
-Leicestershire," 2,267 ",,,,
-Lincolnshire," 1,174 ",,,,
-Northamptonshire," 1,463 ",,,,
-Nottinghamshire," 2,380 ",,,,
-Staffordshire," 1,998 ",,,,
-Warwickshire," 1,131 ",,,,
-West Mercia," 2,520 ",,,,
-West Midlands," 8,027 ",,,,
-Bedfordshire," 1,454 ",,,,
-Cambridgeshire," 1,707 ",,,,
-Essex," 3,759 ",,,,
-Hertfordshire," 2,380 ",,,,
-Norfolk," 1,902 ",,,,
-Suffolk," 1,415 ",,,,
-"London, City of", 999 ,,,,
-Metropolitan Police," 32,332 ",,,,
-Hampshire and Isle of Wight," 3,364 ",,,,
-Kent," 4,167 ",,,,
-Surrey," 2,344 ",,,,
-Sussex," 3,230 ",,,,
-Thames Valley," 4,993 ",,,,
-Avon and Somerset," 3,314 ",,,,
-Devon and Cornwall," 3,569 ",,,,
-Dorset," 1,404 ",,,,
-Gloucestershire," 1,349 ",,,,
-Wiltshire," 1,215 ",,,,
-Dyfed-Powys," 1,261 ",,,,
-Gwent," 1,549 ",,,,
-North Wales," 1,723 ",,,,
-South Wales," 3,496 ",,,,
-,,,,,
-,,,,,
+Year,PFA_Name,Police_Count
+2021,Cleveland," 1,426 "
+2021,Durham," 1,228 "
+2021,Northumbria," 3,486 "
+2021,Cheshire," 2,191 "
+2021,Cumbria," 1,274 "
+2021,Greater Manchester," 7,263 "
+2021,Lancashire," 3,239 "
+2021,Merseyside," 3,962 "
+2021,Humberside," 2,102 "
+2021,North Yorkshire," 1,542 "
+2021,South Yorkshire," 2,825 "
+2021,West Yorkshire," 5,705 "
+2021,Derbyshire," 1,913 "
+2021,Leicestershire," 2,252 "
+2021,Lincolnshire," 1,133 "
+2021,Northamptonshire," 1,398 "
+2021,Nottinghamshire," 2,222 "
+2021,Staffordshire," 1,779 "
+2021,Warwickshire," 1,053 "
+2021,West Mercia," 2,312 "
+2021,West Midlands," 7,445 "
+2021,Bedfordshire," 1,364 "
+2021,Cambridgeshire," 1,655 "
+2021,Essex," 3,474 "
+2021,Hertfordshire," 2,258 "
+2021,Norfolk," 1,809 "
+2021,Suffolk," 1,318 "
+2021,"London, City of", 851 
+2021,Metropolitan Police," 33,433 "
+2021,Hampshire and Isle of Wight," 3,129 "
+2021,Kent," 3,880 "
+2021,Surrey," 2,061 "
+2021,Sussex," 2,870 "
+2021,Thames Valley," 4,413 "
+2021,Avon and Somerset," 3,072 "
+2021,Devon and Cornwall," 3,319 "
+2021,Dorset," 1,293 "
+2021,Gloucestershire," 1,191 "
+2021,Wiltshire," 1,080 "
+2021,Dyfed-Powys," 1,207 "
+2021,Gwent," 1,364 "
+2021,North Wales," 1,640 "
+2021,South Wales," 3,151 "
+2022,Cleveland," 1,429 "
+2022,Durham," 1,285 "
+2022,Northumbria," 3,622 "
+2022,Cheshire," 2,330 "
+2022,Cumbria," 1,270 "
+2022,Greater Manchester," 7,536 "
+2022,Lancashire," 3,321 "
+2022,Merseyside," 4,062 "
+2022,Humberside," 2,162 "
+2022,North Yorkshire," 1,637 "
+2022,South Yorkshire," 2,949 "
+2022,West Yorkshire," 5,838 "
+2022,Derbyshire," 2,001 "
+2022,Leicestershire," 2,282 "
+2022,Lincolnshire," 1,167 "
+2022,Northamptonshire," 1,429 "
+2022,Nottinghamshire," 2,361 "
+2022,Staffordshire," 1,895 "
+2022,Warwickshire," 1,018 "
+2022,West Mercia," 2,343 "
+2022,West Midlands," 7,596 "
+2022,Bedfordshire," 1,383 "
+2022,Cambridgeshire," 1,645 "
+2022,Essex," 3,604 "
+2022,Hertfordshire," 2,234 "
+2022,Norfolk," 1,872 "
+2022,Suffolk," 1,360 "
+2022,"London, City of", 958 
+2022,Metropolitan Police," 34,517 "
+2022,Hampshire and Isle of Wight," 3,227 "
+2022,Kent," 4,005 "
+2022,Surrey," 2,117 "
+2022,Sussex," 2,960 "
+2022,Thames Valley," 4,698 "
+2022,Avon and Somerset," 3,137 "
+2022,Devon and Cornwall," 3,442 "
+2022,Dorset," 1,349 "
+2022,Gloucestershire," 1,248 "
+2022,Wiltshire," 1,120 "
+2022,Dyfed-Powys," 1,259 "
+2022,Gwent," 1,478 "
+2022,North Wales," 1,640 "
+2022,South Wales," 3,361 "
+2023,Cleveland," 1,495 "
+2023,Durham," 1,372 "
+2023,Northumbria," 3,796 "
+2023,Cheshire," 2,355 "
+2023,Cumbria," 1,376 "
+2023,Greater Manchester," 8,070 "
+2023,Lancashire," 3,567 "
+2023,Merseyside," 4,152 "
+2023,Humberside," 2,295 "
+2023,North Yorkshire," 1,662 "
+2023,South Yorkshire," 2,993 "
+2023,West Yorkshire," 6,062 "
+2023,Derbyshire," 2,131 "
+2023,Leicestershire," 2,267 "
+2023,Lincolnshire," 1,209 "
+2023,Northamptonshire," 1,487 "
+2023,Nottinghamshire," 2,387 "
+2023,Staffordshire," 1,985 "
+2023,Warwickshire," 1,118 "
+2023,West Mercia," 2,520 "
+2023,West Midlands," 7,874 "
+2023,Bedfordshire," 1,444 "
+2023,Cambridgeshire," 1,736 "
+2023,Essex," 3,747 "
+2023,Hertfordshire," 2,400 "
+2023,Norfolk," 1,899 "
+2023,Suffolk," 1,393 "
+2023,"London, City of", 987 
+2023,Metropolitan Police," 34,500 "
+2023,Hampshire and Isle of Wight," 3,362 "
+2023,Kent," 4,167 "
+2023,Surrey," 2,289 "
+2023,Sussex," 3,155 "
+2023,Thames Valley," 4,924 "
+2023,Avon and Somerset," 3,310 "
+2023,Devon and Cornwall," 3,642 "
+2023,Dorset," 1,430 "
+2023,Gloucestershire," 1,301 "
+2023,Wiltshire," 1,204 "
+2023,Dyfed-Powys," 1,303 "
+2023,Gwent," 1,516 "
+2023,North Wales," 1,714 "
+2023,South Wales," 3,499 "
+2024,Cleveland," 1,510 "
+2024,Durham," 1,385 "
+2024,Northumbria," 3,830 "
+2024,Cheshire," 2,363 "
+2024,Cumbria," 1,379 "
+2024,Greater Manchester," 8,112 "
+2024,Lancashire," 3,569 "
+2024,Merseyside," 4,154 "
+2024,Humberside," 2,272 "
+2024,North Yorkshire," 1,652 "
+2024,South Yorkshire," 3,027 "
+2024,West Yorkshire," 6,137 "
+2024,Derbyshire," 2,096 "
+2024,Leicestershire," 2,247 "
+2024,Lincolnshire," 1,205 "
+2024,Northamptonshire," 1,473 "
+2024,Nottinghamshire," 2,401 "
+2024,Staffordshire," 2,001 "
+2024,Warwickshire," 1,149 "
+2024,West Mercia," 2,524 "
+2024,West Midlands," 7,995 "
+2024,Bedfordshire," 1,455 "
+2024,Cambridgeshire," 1,725 "
+2024,Essex," 3,758 "
+2024,Hertfordshire," 2,379 "
+2024,Norfolk," 1,899 "
+2024,Suffolk," 1,400 "
+2024,"London, City of", 989 
+2024,Metropolitan Police," 33,793 "
+2024,Hampshire and Isle of Wight," 3,349 "
+2024,Kent," 4,168 "
+2024,Surrey," 2,295 "
+2024,Sussex," 3,182 "
+2024,Thames Valley," 5,023 "
+2024,Avon and Somerset," 3,281 "
+2024,Devon and Cornwall," 3,612 "
+2024,Dorset," 1,422 "
+2024,Gloucestershire," 1,321 "
+2024,Wiltshire," 1,243 "
+2024,Dyfed-Powys," 1,302 "
+2024,Gwent," 1,542 "
+2024,North Wales," 1,721 "
+2024,South Wales," 3,529 "
+2025,Cleveland,"1,504"
+2025,Durham,"1,400"
+2025,Northumbria,"3,837"
+2025,Cheshire,"2,417"
+2025,Cumbria,"1,384"
+2025,Greater Manchester,"8,111"
+2025,Lancashire,"3,606"
+2025,Merseyside,"4,172"
+2025,Humberside,"2,284"
+2025,North Yorkshire,"1,656"
+2025,South Yorkshire,"3,040"
+2025,West Yorkshire,"6,130"
+2025,Derbyshire,"2,123"
+2025,Leicestershire,"2,267"
+2025,Lincolnshire,"1,174"
+2025,Northamptonshire,"1,463"
+2025,Nottinghamshire,"2,380"
+2025,Staffordshire,"1,998"
+2025,Warwickshire,"1,131"
+2025,West Mercia,"2,520"
+2025,West Midlands,"8,027"
+2025,Bedfordshire,"1,454"
+2025,Cambridgeshire,"1,707"
+2025,Essex,"3,759"
+2025,Hertfordshire,"2,380"
+2025,Norfolk,"1,902"
+2025,Suffolk,"1,415"
+2025,"London, City of",999
+2025,Metropolitan Police,"32,332"
+2025,Hampshire and Isle of Wight,"3,364"
+2025,Kent,"4,167"
+2025,Surrey,"2,344"
+2025,Sussex,"3,230"
+2025,Thames Valley,"4,993"
+2025,Avon and Somerset,"3,314"
+2025,Devon and Cornwall,"3,569"
+2025,Dorset,"1,404"
+2025,Gloucestershire,"1,349"
+2025,Wiltshire,"1,215"
+2025,Dyfed-Powys,"1,261"
+2025,Gwent,"1,549"
+2025,North Wales,"1,723"
+2025,South Wales,"3,496"
