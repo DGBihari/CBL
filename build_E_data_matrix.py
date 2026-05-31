@@ -28,7 +28,7 @@ def get_master_pfa_list_from_lookup(lookup_csv=LAD_TO_PFA_LOOKUP):
 
 CRIME_CSV_DIR = r"C:\Users\danie\Downloads\uni\year 2\q4\4CBLW020\project\CBL\csv\crime_data"   # change
 
-# Aggressive Sanitization Function, almost same as run_sde_pipeline to make it global, use mask for pandas?
+# same as run_sde_pipeline to make it global, make SURE names match all data invalid/missing in E_data and wrong coeff
 def standardize_pfa_names(series):
     series = series.astype(str).str.strip().str.replace('\n', '', regex=True)
     # Strip out the formal suffixes from the raw UK Police data
@@ -40,18 +40,13 @@ def standardize_pfa_names(series):
     # Force the crime data's "City of London" to match the map's "London, City of"
     series.loc[series.str.contains('City of London', case=False, na=False)] = 'London, City of'
     # fioxes
-    series.loc[series.str.contains('Devon', case=False, na=False)] = 'Devon & Cornwall' # do correct mapping for these, then series.replace?
-    series.loc[series.str.contains('Hampshire', case=False, na=False)] = 'Hampshire'
+    series.loc[series.str.contains('Devon', case=False, na=False)] = 'Devon and Cornwall' # do correct mapping for these, then series.replace?
+    series.loc[series.str.contains('Hampshire', case=False, na=False)] = 'Hampshire and Isle of Wight'
     #series.loc[series.str.contains('Greater Manchester', case=False, na=False)] = 'Greater Manchester'
     return series
 
 
 def build_E_data(directory: str = CRIME_CSV_DIR):
-    """
-    Recursively finds all *-street.csv files under `directory`,
-    counts crimes per (Month, PFA), and returns a (K_months, NR) matrix.
-    """
-    # ** means any subdirectory depth — handles YYYY-MM/YYYY-MM-force-street.csv
     files = sorted(glob.glob(os.path.join(directory, "**", "*-street.csv"), recursive=True))
 
     if not files:

@@ -1,0 +1,165 @@
+Final to do: 
+-build E_data only once
+- E_data K = 45 instead of 43???
+
+V1
+
+Starting the Spatial Network SDE Pipeline (Reaction-Diffusion + Regression)...
+Building the geographic neighbor network...
+Ingesting real crime data from /csv/crime_data folder...
+Found 2621 CSV files. Beginning processing...
+Real crime data merged.
+Applying linear regression and interpolation to N_i and P_i...
+
+Fitting α_i and γ_i coefficients from monthly crime data...
+Found 2621 CSV files across all month folders.
+Total crime records loaded: 30,485,470
+
+E_data matrix shape : (60, 45)  (60 months * 45 PFAs)
+Months: 2021-01  →  2025-12
+Mean monthly crimes per PFA: 11290.9
+
+======================================================================
+PFA                                        α_i        γ_i  flags
+----------------------------------------------------------------------
+Lincolnshire                          -0.05290    0.00056  α<0
+Norfolk                               -0.00803   -0.00373  α<0, γ<0
+Nottinghamshire                        0.00530    0.00036  ok
+Thames Valley                         -0.24896   -0.00255  α<0, γ<0
+Staffordshire                         -0.04664    0.00144  α<0
+Suffolk                               -0.03543   -0.00351  α<0, γ<0
+Surrey                                -0.06552    0.00121  α<0
+Warwickshire                          -0.08460   -0.00006  α<0, γ<0
+Sussex                                -0.00153    0.00142  α<0
+Cleveland                              0.01082    0.00215  ok
+Durham                                -0.01178    0.00025  α<0
+Cheshire                              -0.02197    0.00337  α<0
+Lancashire                            -0.00803    0.00476  α<0
+Humberside                            -0.01617   -0.00158  α<0, γ<0
+North Yorkshire                       -0.37664   -0.00242  α<0, γ<0
+Derbyshire                            -0.02265    0.00105  α<0
+Leicestershire                         0.01262   -0.00957  γ<0
+West Mercia                           -0.11182   -0.00045  α<0, γ<0
+Avon and Somerset                      0.01607    0.00227  ok
+Devon & Cornwall                       0.00275   -0.00000  γ<0
+Wiltshire                             -0.01526   -0.00039  α<0, γ<0
+Cambridgeshire                        -0.00980    0.00106  α<0
+Bedfordshire                           0.00771   -0.00567  γ<0
+Essex                                 -0.08502   -0.00623  α<0, γ<0
+Kent                                  -0.07662   -0.00261  α<0, γ<0
+Hampshire                              0.00024   -0.00000  γ<0
+Northumbria                            0.00436    0.00039  ok
+Dorset                                -0.00482    0.00111  α<0
+Gloucestershire                       -0.00540    0.00144  α<0
+Hertfordshire                         -0.04579    0.00167  α<0
+Northamptonshire                      -0.05588    0.00043  α<0
+Cumbria                               -0.35671   -0.00013  α<0, γ<0
+Greater Manchester                    13.62305    0.00841  |α|>1
+Merseyside                             0.01072   -0.01883  γ<0
+South Yorkshire                        0.01126   -0.00966  γ<0
+West Midlands                          0.01262   -0.00340  γ<0
+West Yorkshire                         0.01799   -0.00442  γ<0
+London, City of                        0.00425   -1.22087  γ<0
+Metropolitan Police                    0.01018   -0.00219  γ<0
+North Wales                           -0.01138    0.00204  α<0
+Dyfed-Powys                           -0.17370   -0.00178  α<0, γ<0
+South Wales                            0.00670    0.00418  ok
+Gwent                                 -0.00196   -0.00032  α<0, γ<0
+======================================================================
+
+α_i:  mean=0.27446  std=2.06162  negatives=27/43
+γ_i:  mean=-0.02932  std=0.18391  negatives=23/43
+β  :  0.00575
+
+Coefficients applied to ts_data. β = 0.00575
+Reminder: pass β into calculate_spatial_spillover(..., beta=beta)
+
+Calculating spatial gradients and empirical coefficients...
+Solving the Network-Coupled Stochastic Differential Equation...
+
+Success! Analyzed 215 empirical spatial data points.
+Pipeline complete. Exported time_series_master_calculated.csv
+
+
+
+PROBLEMS: 
+- E_data is (60, 45) but you only have 43 PFAs. Two PFAs in the crime data don't match your master list 
+- Greater Manchester α = 13.62 — extreme outlier. Your pipeline already flags GMP as corrupted data (the Sigma_i failsafe comment). The same corruption is blowing up the least squares fit here. One bad monthly spike makes the solver wildly overfit.
+- The root cause is that your police data is annual interpolated to monthly — meaning ΔP_i is essentially a constant small value repeated across all 60 rows for each region. When a column in A_i is nearly constant, the solver can't cleanly separate the police effect from the crime trend, so signs flip arbitrarily.
+
+FIX using CBL 20 Sali's doc: Option 2 from the PDF — fix α from the deprivation index (which you already have as IMD_Score) and only fit γ per region. This eliminates the identification problem entirely: 
+
+
+
+Version 2:
+Hampshire wrong name in csv same for Devon -> y = 0 -> more police doesn't mean less crime
+
+# Problem with these 2 is that police is yearly interpolated -> delta_P is near constant and so delta_Pi ~ C_i => least squares can't distinguish
+# -> MUST use Option C, with fixed beta, and alpha anchored in depravation index, getting gamma per region
+
+AFTER fixing the problem and using option C:
+
+Months: 2021-01  →  2025-12
+Mean monthly crimes per PFA: 11290.9
+  Clamping 4 negative γ_i to median (0.29589): ['Merseyside', 'West Midlands', 'West Yorkshire', 'Metropolitan Police']
+
+======================================================================
+PFA                                        α_i        γ_i  flags
+----------------------------------------------------------------------
+Lincolnshire                           0.29508    0.29589  ok
+Norfolk                                0.28986    0.17673  ok
+Nottinghamshire                        0.26536    0.15906  ok
+Thames Valley                          0.18222    0.63091  ok
+Staffordshire                          0.25034    0.97593  ok
+Suffolk                                0.25835    0.58702  ok
+Surrey                                 0.15491    1.21401  ok
+Warwickshire                           0.22887    0.63314  ok
+Sussex                                 0.24999    0.19354  ok
+Cleveland                              0.34000    0.32658  ok
+Durham                                 0.32833    0.60578  ok
+Cheshire                               0.24760    0.52769  ok
+Lancashire                             0.30081    0.38142  ok
+Humberside                             0.27631    0.29328  ok
+North Yorkshire                        0.19702    1.23775  ok
+Derbyshire                             0.26633    0.43946  ok
+Leicestershire                         0.21145    0.07604  ok
+West Mercia                            0.24835    0.62151  ok
+Avon and Somerset                      0.20935    0.01183  ok
+Devon and Cornwall                     0.27495    0.06776  ok
+Wiltshire                              0.21921    0.25346  ok
+Cambridgeshire                         0.22926    0.15043  ok
+Bedfordshire                           0.26960    0.15903  ok
+Essex                                  0.24321    1.20860  ok
+Kent                                   0.27759    1.27526  ok
+Hampshire and Isle of Wight            0.21574    0.03312  ok
+Northumbria                            0.32009    0.08110  ok
+Dorset                                 0.24044    0.15948  ok
+Gloucestershire                        0.21411    0.29427  ok
+Hertfordshire                          0.20167    0.65003  ok
+Northamptonshire                       0.24904    0.36858  ok
+Cumbria                                0.27959    0.30765  ok
+Greater Manchester                     0.32032    0.30374  ok
+Merseyside                             0.33557    0.29589  ok
+South Yorkshire                        0.33528    0.18485  ok
+West Midlands                          0.33331    0.29589  ok
+West Yorkshire                         0.32316    0.29589  ok
+London, City of                        0.15833    2.78736  ok
+Metropolitan Police                    0.29476    0.29589  ok
+North Wales                            0.25989    0.20272  ok
+Dyfed-Powys                            0.25989    0.24210  ok
+South Wales                            0.25989    0.05490  ok
+Gwent                                  0.25989    0.15006  ok
+======================================================================
+
+α_i:  mean=0.25989  std=0.04676  negatives=0/43
+γ_i:  mean=0.45362  std=0.49065  negatives=0/43
+β  :  0.15000
+
+Coefficients applied to ts_data. β = 0.15000
+Reminder: pass β into calculate_spatial_spillover(..., beta=beta)
+
+Calculating spatial gradients and empirical coefficients...
+Solving the Network-Coupled Stochastic Differential Equation...
+
+Success! Analyzed 215 empirical spatial data points.
+Pipeline complete. Exported time_series_master_calculated.csv
