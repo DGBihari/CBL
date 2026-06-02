@@ -190,7 +190,7 @@ for j in range(len(master_pfas)):
 
 # Build empirical total for plotting
 E_emp_total = E_data.sum(axis=1)
-
+# sigma_i = stdev/mean for all pfa's so the sum of that
 # Build sigma vector from ts_data (one value per PFA)
 sigma_vector = (
     ts_data.groupby('PFA_Name')['Sigma_i']
@@ -205,7 +205,7 @@ np.random.seed(42)
 
 # Run multiple stochastic ODE realizations
 num_realizations = 50
-
+# SDE, args are here
 def ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb):
     dE = np.zeros(len(master_pfas))
     omega = 2 * np.pi / 12
@@ -228,8 +228,9 @@ def ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb):
         seasonal = (1.7 * (B_fit[i] + B_perturb[i])) * np.cos(omega * t - phase_shift)
         suppression = min(beta_fit[i] + beta_perturb[i], 1.0) * E_vec[i] * (P_i_t ** -0.3)
 
-        drift = 1.40 * (growth + nb_term - suppression + seasonal)
-        noise = (P_i_t ** -0.3) * E_vec[i] * sigma_vector[i] * np.random.normal(0, np.sqrt(1 / 12))
+        # amplitude 
+        drift = 3 * (growth + nb_term - suppression  + seasonal)  # 
+        noise = (P_i_t ** -0.3) * 10.0 * sigma_vector[i] * np.random.normal(0, np.sqrt(1 / 12))
 
         dE[i] = drift + noise
 
@@ -239,10 +240,10 @@ def ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb):
 all_solutions = []
 
 for realization in range(num_realizations):
-    # Generate random perturbations (±5% noise)
-    alpha_perturb = np.random.normal(0, 0.05 * alpha_fit)
+    # Only perturb seasonal amplitude — alpha/beta multiply E_vec and cause CI fan-out
+    alpha_perturb = np.zeros_like(alpha_fit)
     B_perturb = np.random.normal(0, 0.05 * B_fit)
-    beta_perturb = np.random.normal(0, 0.05 * beta_fit)
+    beta_perturb = np.zeros_like(beta_fit)
 
     ode_closure = lambda t, E_vec: ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb)
 
