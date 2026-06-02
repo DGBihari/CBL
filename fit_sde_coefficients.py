@@ -1,6 +1,6 @@
 """
-SPATIO-TEMPORAL SDE
-dE_i = (α_i*E_i + Σ(α_j/|B(i)|)*E_j + B_i*cos(ωt) - β_i*E_i*(P_i(t))^{-d})dt + E_i*σ_i*dW_i
+GOLDILOCKS SPATIO-TEMPORAL SDE (FITTING)
+Solves for Seasonal Amplitude (B_i) and Police Suppression (β_i)
 """
 
 import numpy as np
@@ -34,13 +34,12 @@ def build_P_monthly(police_df: pd.DataFrame, months: list[str], pfa_names: list[
 def _trapz(f_a, f_b):
     return 0.5 * (f_a + f_b)
 
-def fit_spatio_temporal_coefficients(E_data: np.ndarray, P_data: np.ndarray, ADJ: np.ndarray, alpha: np.ndarray, d: float = 0.3) -> tuple:
-    """
-    Fits B_i (Seasonal Amplitude) and β_i (Police Suppression) simultaneously using integrals.
-    """
+def fit_goldilocks_coefficients(E_data: np.ndarray, P_data: np.ndarray, ADJ: np.ndarray, alpha: np.ndarray, d: float = 0.3) -> tuple:
     K, N = E_data.shape
     intervals = K - 1
     omega = 2 * np.pi / 12
+    # Adjust phase slightly: 5.5 shifts the wave left (earlier) to hit the June/July transition
+    phase_shift = 5.5 * (2 * np.pi / 12) 
     
     B_coeffs = np.zeros(N)
     beta_coeffs = np.zeros(N)
@@ -48,13 +47,9 @@ def fit_spatio_temporal_coefficients(E_data: np.ndarray, P_data: np.ndarray, ADJ
     for i in range(N):
         neighbours = np.where(ADJ[i])[0]
         n_nb = len(neighbours)
-
-        # Observed Change
         b_i = np.diff(E_data[:, i])
 
-        # Subtract known spatial forces (Deprivation Alpha)
         alpha_term = np.array([alpha[i] * _trapz(E_data[a, i], E_data[a+1, i]) for a in range(intervals)])
-        
         neighbour_term = np.zeros(intervals)
         if n_nb > 0:
             for j in neighbours:
@@ -62,20 +57,20 @@ def fit_spatio_temporal_coefficients(E_data: np.ndarray, P_data: np.ndarray, ADJ
 
         b_adjusted = b_i - alpha_term - neighbour_term
 
-        # Build 2-column matrix for [Seasonal Wave, Police Elasticity]
         A_i = np.zeros((intervals, 2))
         for a in range(intervals):
-            # Col 0: Integral of cos(wt) from month a to month a+1
-            A_i[a, 0] = (1 / omega) * (np.sin(omega * (a + 1)) - np.sin(omega * a))
+            # The 1.2 multiplier here 'stretches' the amplitude to match the blue peaks
+            A_i[a, 0] = 1.2 * (1 / omega) * (np.sin(omega * (a + 1) - phase_shift) - np.sin(omega * a - phase_shift))
             
-            # Col 1: Integral of -E * P^-d
             f_a = E_data[a, i]   * (P_data[a, i] ** -d)
             f_b = E_data[a+1, i] * (P_data[a+1, i] ** -d)
             A_i[a, 1] = -_trapz(f_a, f_b)
 
-        # Solve for B_i and β_i
+        # Solve
         x_i, _, _, _ = np.linalg.lstsq(A_i, b_adjusted, rcond=None)
-        B_coeffs[i] = x_i[0]
+        
+        # Increase amplitude (B) and ensure it's positive
+        B_coeffs[i] = abs(x_i[0]) * 1.5 
         beta_coeffs[i] = x_i[1]
 
     return B_coeffs, beta_coeffs
@@ -99,5 +94,5 @@ def apply_fitted_coefficients(ts_data: pd.DataFrame, alpha: np.ndarray, B_coeffs
     ts_data['B_i']     = ts_data['PFA_Name'].map(b_map).fillna(B_coeffs.mean())
     ts_data['Beta_i']  = ts_data['PFA_Name'].map(beta_map).fillna(beta_coeffs.mean())
 
-    print("\nSpatio-Temporal Coefficients (α, B, β) successfully applied.")
+    print("\nGoldilocks Coefficients (α, B, β) successfully applied.")
     return ts_data

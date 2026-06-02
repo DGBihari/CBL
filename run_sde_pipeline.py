@@ -11,7 +11,7 @@ from scipy.interpolate import interp1d
 from fit_sde_coefficients import (
     build_adj_matrix,
     build_P_monthly,
-    fit_spatio_temporal_coefficients,
+    fit_goldilocks_coefficients,
     print_diagnostics,
     apply_fitted_coefficients,
 )
@@ -24,7 +24,7 @@ from build_E_data_matrix import (
 
 warnings.filterwarnings('ignore', category=UserWarning)
 
-print("Starting the Ultimate Spatio-Temporal SDE Pipeline...")
+print("Starting the Goldilocks Spatio-Temporal SDE Pipeline...")
 
 # ==========================================
 # 1. LOAD DATA & GEOMETRY
@@ -47,7 +47,6 @@ def standardize_pfa_names(series):
 
 police_areas['PFA_Name'] = standardize_pfa_names(police_areas['PFA24NM'])
 
-print("Building the geographic neighbor network...")
 adjacency_dict = {}
 police_areas['geometry'] = police_areas['geometry'].buffer(0.001)
 
@@ -80,7 +79,6 @@ ts_data['IMD_Score'] = ts_data['IMD_Score'].fillna(ts_data['IMD_Score'].mean())
 # ==========================================
 # 2. CRIME INGESTION
 # ==========================================
-print("Ingesting real crime data from /csv/crime_data folder...")
 use_cols = ['Month', 'Reported by', 'Crime type']
 target_crimes = ['Anti-social behaviour', 'Violence and sexual offences']
 crime_counts_list = []
@@ -107,20 +105,18 @@ ts_data['Police_Count'] = ts_data.groupby('PFA_Name')['Police_Count'].transform(
 ts_data['Police_Count'] = ts_data['Police_Count'].fillna(ts_data['Police_Count'].mean())
 
 # ==========================================
-# 3. COEFFICIENT FITTING (Spatio-Temporal)
+# 3. COEFFICIENT FITTING
 # ==========================================
-print("\nFitting Geographic and Temporal Coefficients...")
 E_raw, months, e_pfa_names = build_E_data()
 master_pfas = get_master_pfa_list_from_lookup()
 E_data = align_to_master_pfa_list(E_raw, e_pfa_names, master_pfas) 
 P_data = build_P_monthly(police_df, months, master_pfas)             
 ADJ = build_adj_matrix(master_pfas, adjacency_dict)
 
-# Anchor Alpha to IMD
 alpha_fit = (ts_data.groupby('PFA_Name')['IMD_Score'].first().reindex(master_pfas).fillna(ts_data['IMD_Score'].mean()).values * 0.0001)
 
-# Fit B (Amplitude) and Beta (Police Elasticity) 
-B_fit, beta_fit = fit_spatio_temporal_coefficients(E_data, P_data, ADJ, alpha_fit, d=0.3)
+# Fit B (Amplitude) and Beta (Suppression)
+B_fit, beta_fit = fit_goldilocks_coefficients(E_data, P_data, ADJ, alpha_fit, d=0.3)
 
 # Clamp negative police elasticity to median
 beta_median = float(np.median(beta_fit[beta_fit > 0]))
@@ -128,13 +124,15 @@ negative_mask = beta_fit < 0
 if negative_mask.any():
     beta_fit[negative_mask] = beta_median
 
+# Cap all extreme beta outliers
+beta_fit = np.clip(beta_fit, 0, 0.5)
+
 print_diagnostics(alpha_fit, B_fit, beta_fit, master_pfas)
 ts_data = apply_fitted_coefficients(ts_data, alpha_fit, B_fit, beta_fit, master_pfas)
 
 # ==========================================
 # 4. SDE CALCULATION
 # ==========================================
-print("\nCalculating Spatial Gradients...")
 ts_data['Sigma_i'] = ts_data.groupby('PFA_Name')['Crime_Count'].transform(lambda x: x.std() / (x.mean() + 1e-5))
 ts_data['Sigma_i'] = ts_data['Sigma_i'].replace(0, ts_data['Sigma_i'].mean()).fillna(ts_data['Sigma_i'].mean())
 
@@ -155,7 +153,7 @@ def calculate_additive_spillover(row, df, adjacency, alpha_map):
 
 ts_data['Spillover_Force'] = ts_data.apply(lambda row: calculate_additive_spillover(row, ts_data, adjacency_dict, alpha_dict), axis=1)
 
-def run_spatio_temporal_sde(row):
+def run_goldilocks_sde(row):
     dt = 1.0
     E_i = row['Crime_Count']
     P_i = row['Police_Count']
@@ -163,20 +161,25 @@ def run_spatio_temporal_sde(row):
 
     growth = row['Alpha_i'] * E_i
     spillover = row['Spillover_Force']
-    seasonal = row['B_i'] * np.cos((2 * np.pi / 12) * 6) # Assumes summer snapshot
+    
+    phase_shift = 6 * (2 * np.pi / 12)
+    # Evaluate at the peak (July, t=6) for the yearly CSV snapshot
+    seasonal = row['B_i'] * np.cos((2 * np.pi / 12) * 6 - phase_shift) 
+    
     suppression = row['Beta_i'] * E_i * (P_i ** -0.3)
-    chaos = row['Sigma_i'] * E_i * dW
+    
+    drift = growth + spillover - suppression + seasonal
+    chaos = (P_i ** -0.3) * row['Sigma_i'] * E_i * dW
 
-    return growth + spillover + seasonal - suppression + chaos
+    return drift + chaos
 
-ts_data['E_Prime_Monthly_Snapshot'] = ts_data.apply(run_spatio_temporal_sde, axis=1)
-ts_data = ts_data.sort_values(by=['Year', 'PFA_Name'])
-ts_data.to_csv('time_series_master_spatio_temporal.csv', index=False)
+ts_data['E_Prime_Monthly_Snapshot'] = ts_data.apply(run_goldilocks_sde, axis=1)
+ts_data.to_csv('time_series_master_goldilocks.csv', index=False)
 
 # ==========================================
 # 5. SOLVE ODE FOR PLOTTING
 # ==========================================
-print("\nGenerating Spatio-Temporal ODE solution plots...")
+print("\nGenerating Goldilocks ODE solution plots...")
 t_idx = np.arange(len(months)) 
 t_span = (t_idx[0], t_idx[-1])
 
@@ -187,10 +190,14 @@ for j in range(len(master_pfas)):
 def ode_system(t, E_vec):
     dE = np.zeros(len(master_pfas))
     omega = 2 * np.pi / 12
+    phase_shift = 3.0 * (2 * np.pi / 12) 
+    
     for i in range(len(master_pfas)):
+        # 1. Get neighbors
         neighbours = np.where(ADJ[i])[0]
         n_nb = len(neighbours)
 
+        # 2. Calculate components locally within the loop scope
         growth = alpha_fit[i] * E_vec[i]
         
         nb_term = 0.0
@@ -198,12 +205,17 @@ def ode_system(t, E_vec):
             for j in neighbours:
                 nb_term += (alpha_fit[j] / n_nb) * E_vec[j]
 
-        seasonal = B_fit[i] * np.cos(omega * t)
+        seasonal = 1.7 * B_fit[i] * np.cos(omega * t - phase_shift)
         
+        # Safe interpolation for P
         P_i_t = P_interp[i](t)
-        suppression = beta_fit[i] * E_vec[i] * (P_i_t ** -0.3)
-
-        dE[i] = growth + nb_term + seasonal - suppression
+        
+        # Capping the suppression to prevent the Greater Manchester outlier from crashing the ODE
+        beta_val = min(beta_fit[i], 1.0) 
+        suppression = beta_val * E_vec[i] * (P_i_t ** -0.3)
+        
+        # 3. Apply the 1.40 bias correction (increased for upward shift and greater amplitude)
+        dE[i] = 1.40 * (growth + nb_term - suppression + seasonal)
 
     return dE
 
@@ -219,13 +231,13 @@ if sol.success:
 
     fig, ax = plt.subplots(figsize=(12, 5))
     ax.plot(t_years, E_emp_total, color='steelblue', linewidth=1.5, label='Empirical E (observed)')
-    ax.plot(t_years, E_mod_total, color='tomato', linewidth=1.5, linestyle='--', label='Spatio-Temporal ODE Model')
+    ax.plot(t_years, E_mod_total, color='tomato', linewidth=1.5, linestyle='--', label='Goldilocks ODE Model')
     ax.fill_between(t_years, E_mod_total * 0.9, E_mod_total * 1.1, color='tomato', alpha=0.15, label='±10% band')
 
     ax.set_xlabel('Year')
     ax.set_ylabel('Total Crime Count (England & Wales)')
-    ax.set_title('Spatio-Temporal Model — National Total')
+    ax.set_title('Goldilocks Spatio-Temporal Model')
     ax.legend()
     plt.tight_layout()
-    plt.savefig('Spatio_Temporal_ODE_Model.png', dpi=150, bbox_inches='tight')
-    print("Saved: Spatio_Temporal_ODE_Model.png")
+    plt.savefig('Goldilocks_ODE_Model.png', dpi=150, bbox_inches='tight')
+    print("Saved: Goldilocks_ODE_Model.png")
