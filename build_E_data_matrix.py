@@ -26,7 +26,7 @@ def get_master_pfa_list_from_lookup(lookup_csv=LAD_TO_PFA_LOOKUP):
     return pfa_names
 
 
-CRIME_CSV_DIR = r"C:\Users\danie\Downloads\uni\year 2\q4\4CBLW020\project\CBL\csv\crime_data"   # change
+CRIME_CSV_DIR = os.path.join(os.path.dirname(__file__), "csv", "crime_data")
 
 # same as run_sde_pipeline to make it global, make SURE names match all data invalid/missing in E_data and wrong coeff
 def standardize_pfa_names(series):
