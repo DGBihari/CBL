@@ -4,6 +4,7 @@ import geopandas as gpd
 import warnings
 import glob
 import os
+import json
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 from scipy.interpolate import interp1d
@@ -200,6 +201,28 @@ sigma_vector = (
     .values
 )
 
+# Save arrays needed by the interactive tuner
+np.savez('pipeline_cache.npz',
+    alpha_fit=alpha_fit, B_fit=B_fit, beta_fit=beta_fit,
+    E_data=E_data, P_data=P_data, ADJ=ADJ,
+    sigma_vector=sigma_vector,
+    master_pfas=np.array(master_pfas),
+    months=np.array(months))
+
+# Load per-region coefficient adjustments saved by tune_coefficients.py
+_adj_data = {}
+if os.path.exists('coeff_adjustments.json'):
+    with open('coeff_adjustments.json') as _f:
+        _adj_data = json.load(_f)
+
+def _adj(base, pfa, key):
+    e = _adj_data.get(pfa, {})
+    return (base + e.get(f'{key}_add', 0.0)) * e.get(f'{key}_mul', 1.0)
+
+alpha_adj = np.array([_adj(alpha_fit[i], master_pfas[i], 'alpha') for i in range(len(master_pfas))])
+B_adj     = np.array([_adj(B_fit[i],     master_pfas[i], 'B')     for i in range(len(master_pfas))])
+beta_adj  = np.array([_adj(beta_fit[i],  master_pfas[i], 'beta')  for i in range(len(master_pfas))])
+
 # Set random seed for reproducible ensemble
 np.random.seed(42)
 
@@ -218,15 +241,15 @@ def ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb):
         # Interpolate police count for area i at time t; clamp to >= 1 to avoid P^-0.3 issues
         P_i_t = max(float(P_interp[i](t)), 1.0)
 
-        growth = (alpha_fit[i] + alpha_perturb[i]) * E_vec[i]
+        growth = (alpha_adj[i] + alpha_perturb[i]) * E_vec[i]
 
         nb_term = 0.0
         if n_nb > 0:
             for j in neighbours:
-                nb_term += ((alpha_fit[j] + alpha_perturb[j]) / n_nb) * E_vec[j]
+                nb_term += ((alpha_adj[j] + alpha_perturb[j]) / n_nb) * E_vec[j]
 
-        seasonal = (1.7 * (B_fit[i] + B_perturb[i])) * np.cos(omega * t - phase_shift)
-        suppression = min(beta_fit[i] + beta_perturb[i], 1.0) * E_vec[i] * (P_i_t ** -0.3)
+        seasonal = (1.7 * (B_adj[i] + B_perturb[i])) * np.cos(omega * t - phase_shift)
+        suppression = min(beta_adj[i] + beta_perturb[i], 1.0) * E_vec[i] * (P_i_t ** -0.3)
 
         # amplitude 
         drift = 3 * (growth + nb_term - suppression  + seasonal)  # 
