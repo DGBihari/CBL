@@ -109,8 +109,8 @@ ts_data['Police_Count'] = ts_data['Police_Count'].fillna(ts_data['Police_Count']
 # ==========================================
 E_raw, months, e_pfa_names = build_E_data()
 master_pfas = get_master_pfa_list_from_lookup()
-E_data = align_to_master_pfa_list(E_raw, e_pfa_names, master_pfas) 
-P_data = build_P_monthly(police_df, months, master_pfas)             
+E_data = align_to_master_pfa_list(E_raw, e_pfa_names, master_pfas)
+P_data = build_P_monthly(police_df, months, master_pfas)
 ADJ = build_adj_matrix(master_pfas, adjacency_dict)
 
 alpha_fit = (ts_data.groupby('PFA_Name')['IMD_Score'].first().reindex(master_pfas).fillna(ts_data['IMD_Score'].mean()).values * 0.0001)
@@ -159,19 +159,20 @@ def run_goldilocks_sde(row):
     P_i = row['Police_Count']
     dW = np.random.normal(0, np.sqrt(dt))
 
+    # Deterministic components
     growth = row['Alpha_i'] * E_i
     spillover = row['Spillover_Force']
-    
     phase_shift = 6 * (2 * np.pi / 12)
-    # Evaluate at the peak (July, t=6) for the yearly CSV snapshot
-    seasonal = row['B_i'] * np.cos((2 * np.pi / 12) * 6 - phase_shift) 
-    
-    suppression = row['Beta_i'] * E_i * (P_i ** -0.3)
-    
-    drift = growth + spillover - suppression + seasonal
-    chaos = (P_i ** -0.3) * row['Sigma_i'] * E_i * dW
+    seasonal = 1.7 * row['B_i'] * np.cos((2 * np.pi / 12) * 6 - phase_shift)
+    suppression = min(row['Beta_i'], 1.0) * E_i * (P_i ** -0.3)
 
-    return drift + chaos
+    # Drift = 1.40 * (sum of deterministic forces)
+    drift = 1.40 * (growth + spillover - suppression + seasonal)
+
+    # Noise = (P^-0.3) * E * sigma * dW
+    noise = (P_i ** -0.3) * row['Sigma_i'] * E_i * dW
+
+    return drift + noise
 
 ts_data['E_Prime_Monthly_Snapshot'] = ts_data.apply(run_goldilocks_sde, axis=1)
 ts_data.to_csv('time_series_master_goldilocks.csv', index=False)
@@ -180,64 +181,101 @@ ts_data.to_csv('time_series_master_goldilocks.csv', index=False)
 # 5. SOLVE ODE FOR PLOTTING
 # ==========================================
 print("\nGenerating Goldilocks ODE solution plots...")
-t_idx = np.arange(len(months)) 
+t_idx = np.arange(len(months))
 t_span = (t_idx[0], t_idx[-1])
 
 P_interp = []
 for j in range(len(master_pfas)):
     P_interp.append(interp1d(t_idx, P_data[:, j], kind='linear', fill_value='extrapolate'))
 
-def ode_system(t, E_vec):
+# Build empirical total for plotting
+E_emp_total = E_data.sum(axis=1)
+
+# Build sigma vector from ts_data (one value per PFA)
+sigma_vector = (
+    ts_data.groupby('PFA_Name')['Sigma_i']
+    .first()
+    .reindex(master_pfas)
+    .fillna(ts_data['Sigma_i'].mean())
+    .values
+)
+
+# Set random seed for reproducible ensemble
+np.random.seed(42)
+
+# Run multiple stochastic ODE realizations
+num_realizations = 50
+
+def ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb):
     dE = np.zeros(len(master_pfas))
     omega = 2 * np.pi / 12
-    phase_shift = 3.0 * (2 * np.pi / 12) 
-    
+    phase_shift = 3.0 * (2 * np.pi / 12)
+
     for i in range(len(master_pfas)):
-        # 1. Get neighbors
         neighbours = np.where(ADJ[i])[0]
         n_nb = len(neighbours)
 
-        # 2. Calculate components locally within the loop scope
-        growth = alpha_fit[i] * E_vec[i]
-        
+        # Interpolate police count for area i at time t; clamp to >= 1 to avoid P^-0.3 issues
+        P_i_t = max(float(P_interp[i](t)), 1.0)
+
+        growth = (alpha_fit[i] + alpha_perturb[i]) * E_vec[i]
+
         nb_term = 0.0
         if n_nb > 0:
             for j in neighbours:
-                nb_term += (alpha_fit[j] / n_nb) * E_vec[j]
+                nb_term += ((alpha_fit[j] + alpha_perturb[j]) / n_nb) * E_vec[j]
 
-        seasonal = 1.7 * B_fit[i] * np.cos(omega * t - phase_shift)
-        
-        # Safe interpolation for P
-        P_i_t = P_interp[i](t)
-        
-        # Capping the suppression to prevent the Greater Manchester outlier from crashing the ODE
-        beta_val = min(beta_fit[i], 1.0) 
-        suppression = beta_val * E_vec[i] * (P_i_t ** -0.3)
-        
-        # 3. Apply the 1.40 bias correction (increased for upward shift and greater amplitude)
-        dE[i] = 1.40 * (growth + nb_term - suppression + seasonal)
+        seasonal = (1.7 * (B_fit[i] + B_perturb[i])) * np.cos(omega * t - phase_shift)
+        suppression = min(beta_fit[i] + beta_perturb[i], 1.0) * E_vec[i] * (P_i_t ** -0.3)
 
-    return dE
+        drift = 1.40 * (growth + nb_term - suppression + seasonal)
+        noise = (P_i_t ** -0.3) * E_vec[i] * sigma_vector[i] * np.random.normal(0, np.sqrt(1 / 12))
 
-E0 = E_data[0, :].copy()
-sol = solve_ivp(ode_system, t_span, E0, method='RK45', t_eval=t_idx, max_step=1/12, rtol=1e-4, atol=1e-2)
+        dE[i] = drift + noise
 
-if sol.success:
-    E_modelled = sol.y.T 
-    E_emp_total = E_data.sum(axis=1)        
+    return dE  # outside the loop
+
+# Store solutions from multiple realizations
+all_solutions = []
+
+for realization in range(num_realizations):
+    # Generate random perturbations (±5% noise)
+    alpha_perturb = np.random.normal(0, 0.05 * alpha_fit)
+    B_perturb = np.random.normal(0, 0.05 * B_fit)
+    beta_perturb = np.random.normal(0, 0.05 * beta_fit)
+
+    ode_closure = lambda t, E_vec: ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb)
+
+    E0 = E_data[0, :].copy()
+    sol = solve_ivp(ode_closure, t_span, E0, method='RK45', t_eval=t_idx, max_step=1/12, rtol=1e-4, atol=1e-2)
+
+    if sol.success:
+        all_solutions.append(sol.y.T)
+
+if all_solutions:
+    # Calculate ensemble statistics
+    all_solutions = np.array(all_solutions)
+    E_mod_mean = all_solutions.mean(axis=0).sum(axis=1)
+    E_mod_std = all_solutions.std(axis=0).sum(axis=1)
+    E_mod_upper = E_mod_mean + 1.96 * E_mod_std
+    E_mod_lower = E_mod_mean - 1.96 * E_mod_std
+
+    E_modelled = all_solutions[0]  # Keep first realization for reference
     E_mod_total = E_modelled.sum(axis=1)
 
     t_years = np.array([int(m[:4]) + (int(m[5:7]) - 1) / 12.0 for m in months])
 
     fig, ax = plt.subplots(figsize=(12, 5))
     ax.plot(t_years, E_emp_total, color='steelblue', linewidth=1.5, label='Empirical E (observed)')
-    ax.plot(t_years, E_mod_total, color='tomato', linewidth=1.5, linestyle='--', label='Goldilocks ODE Model')
-    ax.fill_between(t_years, E_mod_total * 0.9, E_mod_total * 1.1, color='tomato', alpha=0.15, label='±10% band')
+    ax.plot(t_years, E_mod_mean, color='tomato', linewidth=1.5, linestyle='--', label='Goldilocks ODE Model (ensemble mean)')
+    ax.fill_between(t_years, E_mod_lower, E_mod_upper, color='tomato', alpha=0.15, label='95% CI (stochastic ensemble)')
 
     ax.set_xlabel('Year')
     ax.set_ylabel('Total Crime Count (England & Wales)')
-    ax.set_title('Goldilocks Spatio-Temporal Model')
+    ax.set_title('Goldilocks Spatio-Temporal Model (with Stochastic Uncertainty)')
     ax.legend()
     plt.tight_layout()
     plt.savefig('Goldilocks_ODE_Model.png', dpi=150, bbox_inches='tight')
     print("Saved: Goldilocks_ODE_Model.png")
+else:
+    print("ODE integration failed for all realizations")
