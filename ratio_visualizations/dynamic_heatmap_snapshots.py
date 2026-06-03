@@ -9,7 +9,7 @@ print("Implementing Numeric-ID failsafe for animated map...")
 
 # 1. Load Data
 gdf = gpd.read_file('../police_areas.geojson')
-ts_data = pd.read_csv('../time_series_master_calculated.csv')
+ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 
 # ==========================================
 # 2. BULLETPROOF NAME MATCHING (Fuzzy Match)
@@ -45,15 +45,26 @@ gdf = gdf.set_index('numeric_id')
 # Create a dictionary to translate our fuzzy names into these safe numeric IDs
 name_to_id = dict(zip(gdf['Simplified_Name'], gdf.index))
 
+
 # ==========================================
 # 4. PREPARE THE TIMELINE
 # ==========================================
 # Ensure no NaN math values crash the color scale
-ts_data['C_Prime_i'] = ts_data['C_Prime_i'].fillna(0)
+ts_data['E_Prime_Monthly_Snapshot'] = ts_data['E_Prime_Monthly_Snapshot'].fillna(0)
 
-max_val = max(abs(ts_data['C_Prime_i'].min()), abs(ts_data['C_Prime_i'].max()))
-if max_val == 0: max_val = 1
-cmap = cm.LinearColormap(['green', 'yellow', 'red'], vmin=-max_val, vmax=max_val)
+# Calculate the exact same limit and bins as the static map
+max_val = max(abs(ts_data['E_Prime_Monthly_Snapshot'].min()), abs(ts_data['E_Prime_Monthly_Snapshot'].max()))
+limit = max_val + 1
+custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limit]
+
+# Use a StepColormap with the exact Hex codes of Folium's "RdYlGn_r"
+cmap = cm.StepColormap(
+    colors=['#1a9850', '#91cf60', '#d9ef8b', '#fee08b', '#fc8d59', '#d73027'], 
+    vmin=-limit, 
+    vmax=limit,
+    index=custom_bins,
+    caption="Crime Growth Rate (E'_i) [Green = Decrease, Red = Increase]"
+)
 
 style_dict = {}
 missing_regions = []
@@ -69,10 +80,13 @@ for _, row in ts_data.iterrows():
             style_dict[region_id] = {}
             
         time_sec = pd.to_datetime(f"{int(row['Year'])}-01-01").timestamp()
-        color = cmap(row['C_Prime_i'])
+        hex_color = cmap(row['E_Prime_Monthly_Snapshot'])
         
-        # Opacity set to 0.8 so you can see the map beneath it
-        style_dict[region_id][str(int(time_sec))] = {'color': color, 'opacity': 0.8}
+        # Keep it simple for the animation plugin
+        style_dict[region_id][str(int(time_sec))] = {
+            'color': hex_color, 
+            'opacity': 0.8
+        }
     else:
         if row['PFA_Name'] not in missing_regions:
             missing_regions.append(row['PFA_Name'])
@@ -89,13 +103,24 @@ else:
 # ==========================================
 uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
 
+# Layer 1: The dynamic animated colors
 TimeSliderChoropleth(
     data=gdf.to_json(),
     styledict=style_dict,
 ).add_to(uk_map)
 
+# Layer 2: The crisp black borders (completely transparent inside)
+folium.GeoJson(
+    gdf,
+    style_function=lambda feature: {
+        'color': '#000000',   # Black borders
+        'weight': 1,          # Border thickness
+        'fillOpacity': 0      # 100% transparent fill so the animation shows through!
+    },
+    name="PFA Boundaries"
+).add_to(uk_map)
+
 # Add Legend
-cmap.caption = "Crime Growth Rate (2021-2025) [Green = Shrinking, Red = Growing]"
 uk_map.add_child(cmap)
 
 uk_map.save('animated_timeline_2021_2025.html')

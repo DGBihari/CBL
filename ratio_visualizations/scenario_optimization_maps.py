@@ -6,7 +6,7 @@ print("Loading data and cleaning map boundaries for optimization map...")
 
 # 1. Load Data
 police_areas = gpd.read_file('../police_areas.geojson')
-ts_data = pd.read_csv('../time_series_master_calculated.csv')
+ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 
 # ==========================================
 # 🚨 BRUTE-FORCE GEOJSON NAMES 🚨
@@ -28,8 +28,8 @@ opt_data = pd.concat([opt_data, met_data], ignore_index=True)
 # ==========================================
 # 3. CALCULATE OPTIMIZATION LEVERAGE
 # ==========================================
-# Leverage Ratio: (Poverty Multiplier / Current Police Density)
-opt_data['Optimization_Leverage'] = (opt_data['IMD_Score'] * 0.005) / (opt_data['Police_Count'] / opt_data['Area_Sq_Km'])
+# Leverage Ratio: (Poverty Multiplier / Current Police Allocation)
+opt_data['Optimization_Leverage'] = (opt_data['IMD_Score'] * 0.005) / opt_data['Police_Count']
 
 # Failsafe for NaN math to prevent black regions
 opt_data['Optimization_Leverage'] = opt_data['Optimization_Leverage'].fillna(0)

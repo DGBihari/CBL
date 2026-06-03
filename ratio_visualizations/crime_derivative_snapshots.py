@@ -6,7 +6,7 @@ print("Loading data and cleaning map boundaries...")
 
 # 1. Load Data
 police_areas = gpd.read_file('../police_areas.geojson')
-ts_data = pd.read_csv('../time_series_master_calculated.csv')
+ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 
 # ==========================================
 # 🚨 BRUTE-FORCE GEOJSON NAMES 🚨
@@ -29,14 +29,14 @@ current_data = pd.concat([current_data, met_data], ignore_index=True)
 # 🚨 PREVENT BLACK REGIONS FROM NaN MATH 🚨
 # If the SDE failed (NaN), force it to 0 so the region renders neutrally
 # ==========================================
-current_data['C_Prime_i'] = current_data['C_Prime_i'].fillna(0)
+current_data['E_Prime_Monthly_Snapshot'] = current_data['E_Prime_Monthly_Snapshot'].fillna(0)
 current_data = current_data.drop_duplicates(subset=['PFA_Name']) # Remove any accidental duplicates
 
 # 3. Render Map
 uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
 
 # Calculate color bins safely
-max_val = max(abs(current_data['C_Prime_i'].min()), abs(current_data['C_Prime_i'].max()))
+max_val = max(abs(current_data['E_Prime_Monthly_Snapshot'].min()), abs(current_data['E_Prime_Monthly_Snapshot'].max()))
 limit = max_val + 1
 custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limit]
 
@@ -44,13 +44,13 @@ folium.Choropleth(
     geo_data=police_areas,
     name="2025 Real Derivative Map",
     data=current_data,
-    columns=["PFA_Name", "C_Prime_i"],
+    columns=["PFA_Name", "E_Prime_Monthly_Snapshot"],
     key_on="feature.properties.PFA24NM",
     fill_color="RdYlGn_r",
     bins=custom_bins,
     fill_opacity=0.8,
     line_opacity=0.3,
-    legend_name="2025 Crime Growth Rate (C'_i)",
+    legend_name="2025 Crime Growth Rate (E'_i)",
     nan_fill_color="black" # Explicitly setting this so we know if the join fails
 ).add_to(uk_map)
 
