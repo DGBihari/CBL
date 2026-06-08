@@ -57,13 +57,13 @@ max_val = max(abs(ts_data['E_Prime_Monthly_Snapshot'].min()), abs(ts_data['E_Pri
 limit = max_val + 1
 custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limit]
 
-# Use a StepColormap with the exact Hex codes of Folium's "RdYlGn_r"
+# Use a StepColormap with Colorblind-Safe RdBu_r Hex Codes
 cmap = cm.StepColormap(
-    colors=['#1a9850', '#91cf60', '#d9ef8b', '#fee08b', '#fc8d59', '#d73027'], 
+    colors=['#4575b4', '#91bfdb', '#e0f3f8', '#fee090', '#fc8d59', '#d73027'], # Dark Blue -> Light -> Red
     vmin=-limit, 
     vmax=limit,
     index=custom_bins,
-    caption="Crime Growth Rate (E'_i) [Green = Decrease, Red = Increase]"
+    caption="Crime Growth Rate (E'_i) [Blue = Decrease, Orange/Red = Increase]" # <--- Updated Caption
 )
 
 style_dict = {}

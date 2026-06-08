@@ -46,11 +46,11 @@ folium.Choropleth(
     data=opt_data,
     columns=["PFA_Name", "Optimization_Leverage"],
     key_on="feature.properties.PFA24NM",
-    fill_color="YlOrRd", # Yellow to Red (Red = High Priority Intervention Zone)
+    fill_color="YlGnBu",     # <--- Colorblind safe sequential scale (Dark Blue = High Priority)
     fill_opacity=0.8,
     line_opacity=0.3,
-    legend_name="Resource Optimization Priority (2025)",
-    nan_fill_color="black" # Explicitly setting this so we know if a join fails
+    legend_name="Resource Optimization Priority (Dark Blue = Highest Leverage)",
+    nan_fill_color="black"
 ).add_to(uk_map)
 
 uk_map.save('optimized_leverage_map_2025.html')

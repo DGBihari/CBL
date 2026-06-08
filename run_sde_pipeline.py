@@ -267,9 +267,9 @@ if all_solutions:
     t_years = np.array([int(m[:4]) + (int(m[5:7]) - 1) / 12.0 for m in months])
 
     fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(t_years, E_emp_total, color='steelblue', linewidth=1.5, label='Empirical E (observed)')
-    ax.plot(t_years, E_mod_mean, color='tomato', linewidth=1.5, linestyle='--', label='Goldilocks ODE Model (ensemble mean)')
-    ax.fill_between(t_years, E_mod_lower, E_mod_upper, color='tomato', alpha=0.15, label='95% CI (stochastic ensemble)')
+    ax.plot(t_years, E_emp_total, color='#0072B2', linewidth=1.5, label='Empirical E (observed)')
+    ax.plot(t_years, E_mod_mean, color='#D55E00', linewidth=1.5, linestyle='--', label='Goldilocks ODE Model (ensemble mean)')
+    ax.fill_between(t_years, E_mod_lower, E_mod_upper, color='#D55E00', alpha=0.15, label='95% CI (stochastic ensemble)')
 
     ax.set_xlabel('Year')
     ax.set_ylabel('Total Crime Count (England & Wales)')

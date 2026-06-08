@@ -71,7 +71,7 @@ P_static = np.array([P0_dict.get(pfa, 1000.0) for pfa in pfa_names])
 # ==========================================
 # 2. GOLDILOCKS ODE SYSTEM WITH STOCHASTIC NOISE
 # ==========================================
-num_realizations = 1000
+num_realizations = 10000   # <--- Increased to 10,000
 t_span = (0, 48)  # 4 years into future in months
 t_eval = np.linspace(0, 48, 49)
 
@@ -147,13 +147,13 @@ fig, ax = plt.subplots(figsize=(14, 7))
 
 # Plot all individual realizations lightly
 for i in range(len(all_solutions)):
-    ax.plot(t_years, E_total_ensemble[i], color='gray', alpha=0.05, linewidth=0.5)
+    ax.plot(t_years, E_total_ensemble[i], color='gray', alpha=0.01, linewidth=0.5) # Reduced alpha for 10k lines
 
 # Plot ensemble mean
-ax.plot(t_years, E_mean, color='red', linewidth=2.5, label='Ensemble Mean (1000 realizations)')
+ax.plot(t_years, E_mean, color='#D55E00', linewidth=2.5, label='Ensemble Mean (10,000 realizations)') # Colorblind safe
 
 # Plot 95% confidence interval
-ax.fill_between(t_years, E_lower, E_upper, color='red', alpha=0.25, label='95% Confidence Interval')
+ax.fill_between(t_years, E_lower, E_upper, color='#D55E00', alpha=0.25, label='95% Confidence Interval')
 
 ax.set_xlabel('Year', fontsize=12)
 ax.set_ylabel('Total Crime Count (England & Wales)', fontsize=12)

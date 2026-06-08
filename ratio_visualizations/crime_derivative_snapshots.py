@@ -32,6 +32,7 @@ current_data = pd.concat([current_data, met_data], ignore_index=True)
 current_data['E_Prime_Monthly_Snapshot'] = current_data['E_Prime_Monthly_Snapshot'].fillna(0)
 current_data = current_data.drop_duplicates(subset=['PFA_Name']) # Remove any accidental duplicates
 
+current_data = current_data[current_data['PFA_Name'] != 'Greater Manchester']
 # 3. Render Map
 uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
 
@@ -46,12 +47,12 @@ folium.Choropleth(
     data=current_data,
     columns=["PFA_Name", "E_Prime_Monthly_Snapshot"],
     key_on="feature.properties.PFA24NM",
-    fill_color="RdYlGn_r",
+    fill_color="RdBu_r",           # <--- Colorblind safe diverging scale
     bins=custom_bins,
     fill_opacity=0.8,
     line_opacity=0.3,
     legend_name="2025 Crime Growth Rate (E'_i)",
-    nan_fill_color="black" # Explicitly setting this so we know if the join fails
+    nan_fill_color="black" 
 ).add_to(uk_map)
 
 uk_map.save('real_crime_derivative_map_2025.html')
