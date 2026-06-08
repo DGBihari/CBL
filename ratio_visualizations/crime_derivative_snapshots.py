@@ -1,22 +1,33 @@
 import geopandas as gpd
 import folium
 import pandas as pd
+import warnings
 
+warnings.filterwarnings('ignore')
 print("Loading data and cleaning map boundaries...")
 
-# 1. Load Data
+# ==========================================
+# 1. LOAD DATA
+# ==========================================
 police_areas = gpd.read_file('../police_areas.geojson')
 ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 
-# ==========================================
-# 🚨 BRUTE-FORCE GEOJSON NAMES 🚨
-# Overwrite any invisible characters directly in the map boundaries
-# ==========================================
 police_areas['PFA24NM'] = police_areas['PFA24NM'].astype(str).str.strip()
 police_areas.loc[police_areas['PFA24NM'].str.contains('Devon', case=False, na=False), 'PFA24NM'] = 'Devon and Cornwall'
 police_areas.loc[police_areas['PFA24NM'].str.contains('Hampshire', case=False, na=False), 'PFA24NM'] = 'Hampshire and Isle of Wight'
 
-# 2. Prepare 2025 CSV Data
+# ==========================================
+# 2. CALCULATE GLOBAL 5-YEAR COLOR SCALE
+# ==========================================
+ts_data['E_Prime_Monthly_Snapshot'] = ts_data['E_Prime_Monthly_Snapshot'].fillna(0)
+
+global_max = max(abs(ts_data['E_Prime_Monthly_Snapshot'].min()), abs(ts_data['E_Prime_Monthly_Snapshot'].max()))
+limit = global_max + 1
+custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limit]
+
+# ==========================================
+# 3. PREPARE 2025 CSV DATA
+# ==========================================
 current_data = ts_data[ts_data['Year'] == 2025].copy()
 current_data['PFA_Name'] = current_data['PFA_Name'].astype(str).str.strip()
 
@@ -25,21 +36,14 @@ met_data = current_data[current_data['PFA_Name'] == 'Metropolitan Police'].copy(
 met_data['PFA_Name'] = 'London, City of'
 current_data = pd.concat([current_data, met_data], ignore_index=True)
 
-# ==========================================
-# 🚨 PREVENT BLACK REGIONS FROM NaN MATH 🚨
-# If the SDE failed (NaN), force it to 0 so the region renders neutrally
-# ==========================================
-current_data['E_Prime_Monthly_Snapshot'] = current_data['E_Prime_Monthly_Snapshot'].fillna(0)
-current_data = current_data.drop_duplicates(subset=['PFA_Name']) # Remove any accidental duplicates
-
+# 🚨 OVERRIDE: Force Greater Manchester to black 🚨
 current_data = current_data[current_data['PFA_Name'] != 'Greater Manchester']
-# 3. Render Map
-uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
+current_data = current_data.drop_duplicates(subset=['PFA_Name']) 
 
-# Calculate color bins safely
-max_val = max(abs(current_data['E_Prime_Monthly_Snapshot'].min()), abs(current_data['E_Prime_Monthly_Snapshot'].max()))
-limit = max_val + 1
-custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limit]
+# ==========================================
+# 4. RENDER MAP
+# ==========================================
+uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
 
 folium.Choropleth(
     geo_data=police_areas,
@@ -47,13 +51,13 @@ folium.Choropleth(
     data=current_data,
     columns=["PFA_Name", "E_Prime_Monthly_Snapshot"],
     key_on="feature.properties.PFA24NM",
-    fill_color="RdBu_r",           # <--- Colorblind safe diverging scale
+    fill_color="RdBu_r",
     bins=custom_bins,
     fill_opacity=0.8,
     line_opacity=0.3,
     legend_name="2025 Crime Growth Rate (E'_i)",
-    nan_fill_color="black" 
+    nan_fill_color="#000000" 
 ).add_to(uk_map)
 
 uk_map.save('real_crime_derivative_map_2025.html')
-print("Map generated! Open real_crime_derivative_map_2025.html to view.")
+print("✅ Map generated! Open real_crime_derivative_map_2025.html to view.")
