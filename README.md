@@ -62,6 +62,16 @@ The `comparative_policy_simulations.py` script allows researchers to test distin
 5. **Kieran van Eijk:** R&D, Policies & Final Advice, Report, Midterm Presentation
 
 ---
+## Sequence of Running
+1. run_sde_pipeline.py
+2. crime_derivatice_snapshots.py
+3. scenario_optimization_maps.py
+4. dynamic_heatmap_snapshots.py
+5. scenario_optimization_maps.py
+6. monte_carlo_ensemble.py
+7. comparative_policy_simulations.py (Change Boolean Values for the Three Policies)
+
+---
 
 ## ⚙️ Installation & Usage
 
