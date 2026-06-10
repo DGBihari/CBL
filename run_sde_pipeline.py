@@ -26,9 +26,8 @@ warnings.filterwarnings('ignore', category=UserWarning)
 
 print("Starting the Goldilocks Spatio-Temporal SDE Pipeline...")
 
-# ==========================================
-# 1. LOAD DATA & GEOMETRY
-# ==========================================
+
+#load data and geographic boundaries
 imd_df        = pd.read_csv('csv/imd.csv')
 lookup_df     = pd.read_csv('csv/lad_to_pfa_lookup.csv')
 police_df     = pd.read_csv('csv/police_data.csv')
@@ -76,9 +75,8 @@ police_df['Police_Count'] = pd.to_numeric(police_df['Police_Count'].astype(str).
 ts_data = pd.merge(ts_data, police_df, on=['PFA_Name', 'Year'], how='left')
 ts_data['IMD_Score'] = ts_data['IMD_Score'].fillna(ts_data['IMD_Score'].mean())
 
-# ==========================================
-# 2. CRIME INGESTION
-# ==========================================
+
+# read and consider crimes
 use_cols = ['Month', 'Reported by', 'Crime type']
 target_crimes = ['Anti-social behaviour', 'Violence and sexual offences']
 crime_counts_list = []
@@ -104,9 +102,8 @@ ts_data = ts_data.sort_values(by=['PFA_Name', 'Year'])
 ts_data['Police_Count'] = ts_data.groupby('PFA_Name')['Police_Count'].transform(lambda g: g.interpolate(method='linear', limit_direction='both'))
 ts_data['Police_Count'] = ts_data['Police_Count'].fillna(ts_data['Police_Count'].mean())
 
-# ==========================================
-# 3. COEFFICIENT FITTING
-# ==========================================
+
+# coefficient fitting
 E_raw, months, e_pfa_names = build_E_data()
 master_pfas = get_master_pfa_list_from_lookup()
 E_data = align_to_master_pfa_list(E_raw, e_pfa_names, master_pfas)
@@ -118,7 +115,7 @@ alpha_fit = (ts_data.groupby('PFA_Name')['IMD_Score'].first().reindex(master_pfa
 # Fit B (Amplitude) and Beta (Suppression)
 B_fit, beta_fit = fit_goldilocks_coefficients(E_data, P_data, ADJ, alpha_fit, d=0.3)
 
-# Clamp negative police elasticity to median
+# Handle negative beta values by capping them to the median of the positive beta values
 beta_median = float(np.median(beta_fit[beta_fit > 0]))
 negative_mask = beta_fit < 0
 if negative_mask.any():
@@ -130,9 +127,8 @@ beta_fit = np.clip(beta_fit, 0, 0.5)
 print_diagnostics(alpha_fit, B_fit, beta_fit, master_pfas)
 ts_data = apply_fitted_coefficients(ts_data, alpha_fit, B_fit, beta_fit, master_pfas)
 
-# ==========================================
-# 4. SDE CALCULATION
-# ==========================================
+
+# sde calculation
 ts_data['Sigma_i'] = ts_data.groupby('PFA_Name')['Crime_Count'].transform(lambda x: x.std() / (x.mean() + 1e-5))
 ts_data['Sigma_i'] = ts_data['Sigma_i'].replace(0, ts_data['Sigma_i'].mean()).fillna(ts_data['Sigma_i'].mean())
 
@@ -159,17 +155,14 @@ def run_goldilocks_sde(row):
     P_i = row['Police_Count']
     dW = np.random.normal(0, np.sqrt(dt))
 
-    # Deterministic components
     growth = row['Alpha_i'] * E_i
     spillover = row['Spillover_Force']
     phase_shift = 6 * (2 * np.pi / 12)
     seasonal = 1.7 * row['B_i'] * np.cos((2 * np.pi / 12) * 6 - phase_shift)
     suppression = min(row['Beta_i'], 1.0) * E_i * (P_i ** -0.3)
 
-    # Drift = 1.40 * (sum of deterministic forces)
     drift = 1.40 * (growth + spillover - suppression + seasonal)
 
-    # Noise = (P^-0.3) * E * sigma * dW
     noise = (P_i ** -0.3) * row['Sigma_i'] * E_i * dW
 
     return drift + noise
@@ -177,21 +170,18 @@ def run_goldilocks_sde(row):
 ts_data['E_Prime_Monthly_Snapshot'] = ts_data.apply(run_goldilocks_sde, axis=1)
 ts_data.to_csv('time_series_master_goldilocks.csv', index=False)
 
-# ==========================================
-# 5. SOLVE ODE FOR PLOTTING
-# ==========================================
-print("\nGenerating Goldilocks ODE solution plots...")
 t_idx = np.arange(len(months))
 t_span = (t_idx[0], t_idx[-1])
 
 P_interp = []
 for j in range(len(master_pfas)):
     P_interp.append(interp1d(t_idx, P_data[:, j], kind='linear', fill_value='extrapolate'))
+E_emp_interp = []
+for j in range(len(master_pfas)):
+    E_emp_interp.append(interp1d(t_idx, E_data[:, j], kind='linear', fill_value='extrapolate'))
 
-# Build empirical total for plotting
 E_emp_total = E_data.sum(axis=1)
-# sigma_i = stdev/mean for all pfa's so the sum of that
-# Build sigma vector from ts_data (one value per PFA)
+
 sigma_vector = (
     ts_data.groupby('PFA_Name')['Sigma_i']
     .first()
@@ -200,23 +190,24 @@ sigma_vector = (
     .values
 )
 
-# Set random seed for reproducible ensemble
 np.random.seed(42)
 
-# Run multiple stochastic ODE realizations
 num_realizations = 50
-# SDE, args are here
 def ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb):
     dE = np.zeros(len(master_pfas))
     omega = 2 * np.pi / 12
     phase_shift = 3.0 * (2 * np.pi / 12)
+    
+
+    theta = 0.15
 
     for i in range(len(master_pfas)):
         neighbours = np.where(ADJ[i])[0]
         n_nb = len(neighbours)
 
-        # Interpolate police count for area i at time t; clamp to >= 1 to avoid P^-0.3 issues
+        # interpolate police and empirical crime count at time t
         P_i_t = max(float(P_interp[i](t)), 1.0)
+        E_emp_t = float(E_emp_interp[i](t))
 
         growth = (alpha_fit[i] + alpha_perturb[i]) * E_vec[i]
 
@@ -225,25 +216,26 @@ def ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb):
             for j in neighbours:
                 nb_term += ((alpha_fit[j] + alpha_perturb[j]) / n_nb) * E_vec[j]
 
-        seasonal = (1.7 * (B_fit[i] + B_perturb[i])) * np.cos(omega * t - phase_shift)
+        seasonal = 4.5 * (B_fit[i] + B_perturb[i]) * np.cos(omega * t - phase_shift)
         suppression = min(beta_fit[i] + beta_perturb[i], 1.0) * E_vec[i] * (P_i_t ** -0.3)
 
-        # amplitude 
-        drift = 3 * (growth + nb_term - suppression  + seasonal)  # 
-        noise = (P_i_t ** -0.3) * 10.0 * sigma_vector[i] * np.random.normal(0, np.sqrt(1 / 12))
+        ou_reversion = theta * (E_emp_t - E_vec[i])
+
+        drift = growth + nb_term - suppression + seasonal + ou_reversion
+        
+        noise = (P_i_t ** -0.3) * 30.0 * sigma_vector[i] * np.random.normal(0, np.sqrt(1 / 12))
 
         dE[i] = drift + noise
 
-    return dE  # outside the loop
+    return dE
 
-# Store solutions from multiple realizations
 all_solutions = []
 
 for realization in range(num_realizations):
-    # Only perturb seasonal amplitude — alpha/beta multiply E_vec and cause CI fan-out
-    alpha_perturb = np.zeros_like(alpha_fit)
-    B_perturb = np.random.normal(0, 0.05 * B_fit)
-    beta_perturb = np.zeros_like(beta_fit)
+    # inject baseline uncertainty into the physics of each parallel run
+    alpha_perturb = np.random.normal(0, 0.08 * alpha_fit)  # 8% standard deviation on Alpha
+    B_perturb = np.random.normal(0, 0.05 * B_fit)          # 5% standard deviation on Amplitude
+    beta_perturb = np.random.normal(0, 0.08 * beta_fit)    # 8% standard deviation on Beta
 
     ode_closure = lambda t, E_vec: ode_system_stochastic(t, E_vec, alpha_perturb, B_perturb, beta_perturb)
 
@@ -254,14 +246,13 @@ for realization in range(num_realizations):
         all_solutions.append(sol.y.T)
 
 if all_solutions:
-    # Calculate ensemble statistics
     all_solutions = np.array(all_solutions)
     E_mod_mean = all_solutions.mean(axis=0).sum(axis=1)
     E_mod_std = all_solutions.std(axis=0).sum(axis=1)
     E_mod_upper = E_mod_mean + 1.96 * E_mod_std
     E_mod_lower = E_mod_mean - 1.96 * E_mod_std
 
-    E_modelled = all_solutions[0]  # Keep first realization for reference
+    E_modelled = all_solutions[0]  
     E_mod_total = E_modelled.sum(axis=1)
 
     t_years = np.array([int(m[:4]) + (int(m[5:7]) - 1) / 12.0 for m in months])

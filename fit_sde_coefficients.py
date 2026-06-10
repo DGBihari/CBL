@@ -38,7 +38,6 @@ def fit_goldilocks_coefficients(E_data: np.ndarray, P_data: np.ndarray, ADJ: np.
     K, N = E_data.shape
     intervals = K - 1
     omega = 2 * np.pi / 12
-    # Adjust phase slightly: 5.5 shifts the wave left (earlier) to hit the June/July transition
     phase_shift = 5.5 * (2 * np.pi / 12) 
     
     B_coeffs = np.zeros(N)
@@ -94,5 +93,4 @@ def apply_fitted_coefficients(ts_data: pd.DataFrame, alpha: np.ndarray, B_coeffs
     ts_data['B_i']     = ts_data['PFA_Name'].map(b_map).fillna(B_coeffs.mean())
     ts_data['Beta_i']  = ts_data['PFA_Name'].map(beta_map).fillna(beta_coeffs.mean())
 
-    print("\nGoldilocks Coefficients (α, B, β) successfully applied.")
     return ts_data

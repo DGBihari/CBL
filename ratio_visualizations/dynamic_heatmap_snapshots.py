@@ -6,40 +6,32 @@ from folium.plugins import TimeSliderChoropleth
 import warnings
 
 warnings.filterwarnings('ignore')
-print("Generating Animated Crime Derivative Heatmap...")
 
-# ==========================================
-# 1. LOAD DATA
-# ==========================================
+# load data
 gdf = gpd.read_file('../police_areas.geojson')
 ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 
-# ==========================================
-# 2. CLEAN BOUNDARIES & NAMES
-# ==========================================
+# clean and standardize names for mapping
 gdf['PFA24NM'] = gdf['PFA24NM'].astype(str).str.strip()
 gdf.loc[gdf['PFA24NM'].str.contains('Devon', case=False, na=False), 'PFA24NM'] = 'Devon and Cornwall'
 gdf.loc[gdf['PFA24NM'].str.contains('Hampshire', case=False, na=False), 'PFA24NM'] = 'Hampshire and Isle of Wight'
 
-# Add simplified names for guaranteed mapping
+# add simplified names for guaranteed mapping
 gdf['Simplified_Name'] = gdf['PFA24NM'].str.lower().str.replace('[^a-z]', '', regex=True)
 ts_data['Simplified_Name'] = ts_data['PFA_Name'].str.lower().str.replace('[^a-z]', '', regex=True)
 
-# Convert map index to string IDs
+# convert map index to string IDs
 gdf['id'] = gdf.index.astype(str)
 name_to_id = dict(zip(gdf['Simplified_Name'], gdf['id']))
 
-# ==========================================
-# 3. PREPARE THE TIMELINE & SCALES
-# ==========================================
+# prepare timeline and scales
 ts_data['E_Prime_Monthly_Snapshot'] = ts_data['E_Prime_Monthly_Snapshot'].fillna(0)
 
-# Calculate global limits across all 5 years
+# calculate global limits across all 5 years
 max_val = max(abs(ts_data['E_Prime_Monthly_Snapshot'].min()), abs(ts_data['E_Prime_Monthly_Snapshot'].max()))
 limit = max_val + 1
 custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limit]
 
-# Colorblind-Safe RdBu_r Hex Codes
 cmap = cm.StepColormap(
     colors=['#4575b4', '#91bfdb', '#e0f3f8', '#fee090', '#fc8d59', '#d73027'], 
     vmin=-limit, 
@@ -48,9 +40,7 @@ cmap = cm.StepColormap(
     caption="Crime Growth Rate (E'_i) [Blue = Decrease, Orange/Red = Increase]"
 )
 
-# ==========================================
-# 4. BUILD STYLE DICTIONARY
-# ==========================================
+# create style dict for TimeSliderChoropleth
 style_dict = {}
 for _, row in ts_data.iterrows():
     sim_name = row['Simplified_Name']
@@ -63,9 +53,9 @@ for _, row in ts_data.iterrows():
             
         time_sec = pd.to_datetime(f"{int(row['Year'])}-01-01").timestamp()
         
-        # 🚨 OVERRIDE: Force Greater Manchester to black due to missing data 🚨
+        # color manchester with black due to insufficient data
         if sim_name == 'greatermanchester':
-            hex_color = '#000000'
+            hex_color = "#535353"
         else:
             hex_color = cmap(row['E_Prime_Monthly_Snapshot'])
         
@@ -74,18 +64,14 @@ for _, row in ts_data.iterrows():
             'opacity': 0.8
         }
 
-# ==========================================
-# 5. RENDER THE ANIMATED MAP
-# ==========================================
+# generate animated map
 uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
 
-# Layer 1: The dynamic animated colors
 TimeSliderChoropleth(
     data=gdf.to_json(),
     styledict=style_dict,
 ).add_to(uk_map)
 
-# Layer 2: Lighter, softer borders
 folium.GeoJson(
     gdf,
     style_function=lambda feature: {
@@ -99,4 +85,3 @@ folium.GeoJson(
 
 uk_map.add_child(cmap)
 uk_map.save('animated_timeline_2021_2025.html')
-print("✅ Saved bulletproof animated map to animated_timeline_2021_2025.html")
