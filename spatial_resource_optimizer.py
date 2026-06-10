@@ -12,18 +12,16 @@ print("Initializing Refined Hybrid Shielded Spatial Optimizer...")
 
 TARGET_CRIMES = ['anti_social_behaviour', 'violence_and_sexual_offences']
 
-# --- OPTIMIZATION PARAMETERS ---
 TOTAL_NEW_OFFICERS = 3000
 KEEP_RATIO = 0.95
 BATCH_SIZE = 100
 num_realizations = 1000
 t_span = (0, 36)
 t_forecast = np.linspace(0, 36, 37)
-POLICY_STRENGTH = 0.30  # Slightly boosted to ensure the blue zones emerge clearly
+POLICY_STRENGTH = 0.30  # stronger so blue zones emerge more clearly
 
-# ==========================================
-# 1. LOAD SDE & SPATIAL DATA
-# ==========================================
+# load sde & data
+
 ts_data = pd.read_csv('time_series_master_goldilocks.csv')
 ts_2025 = ts_data[ts_data['Year'] == 2025].copy()
 pfa_names = ts_2025['PFA_Name'].values
@@ -71,9 +69,7 @@ for pfa in pfa_names:
         static_val = max(ts_2025[ts_2025['PFA_Name'] == pfa]['Police_Count'].values[0], 1.0)
         police_extrapolators[pfa] = lambda t, v=static_val: v
 
-# ==========================================
-# 2. INGEST PROPHET DRIFT
-# ==========================================
+# Prophet
 cluster_mapping = {
     'Cluster_A': ['Greater Manchester', 'Merseyside', 'West Midlands', 'Metropolitan Police', 'West Yorkshire'],
     'Cluster_B': ['Cleveland', 'Durham', 'Humberside', 'Northumbria', 'South Yorkshire'],
@@ -120,13 +116,11 @@ for pfa in pfa_names:
             break
     if not assigned: pfa_dF_dt.append(lambda t: 0.0)
 
-# ==========================================
-# 3. HYBRID OPTIMIZATION ENGINE (SHIELDED & MASKED)
-# ==========================================
+# hybrid optimization engine
 base_police_end_2025 = np.array([police_extrapolators[pfa_names[i]](11) for i in range(n_pfas)])
 current_allocation = np.zeros(n_pfas)
 
-# 🚨 THE SHIELD: London and Greater Manchester are locked at 100%
+# outliers like London + Manchester are fixed at 100%, no changes
 for i, pfa in enumerate(pfa_names):
     if pfa in ['Metropolitan Police', 'London, City of', 'Greater Manchester']:
         current_allocation[i] = base_police_end_2025[i]
@@ -150,7 +144,6 @@ def fast_deterministic_cost(police_allocation):
         police_ratio = police_allocation / base_police_end_2025
         ratio_delta = police_ratio - 1.0
 
-        # 🚨 Softened Loss Aversion: Reduced from 2.5 to 1.2 to prevent map-wide spikes
         loss_multiplier = np.where(ratio_delta < 0, 1.2, 1.0)
 
         intervention = POLICY_STRENGTH * beta_vec * E_vec * ratio_delta * loss_multiplier
@@ -167,7 +160,7 @@ for b in range(batches):
     lowest_cost = float('inf')
 
     for i in range(n_pfas):
-        # 🚨 PREVENT Greater Manchester from receiving any new officers
+        # GM no new officers
         if pfa_names[i] == 'Greater Manchester':
             continue
 
@@ -189,9 +182,7 @@ remainder = pool_to_allocate % BATCH_SIZE
 if remainder > 0 and best_pfa_idx != -1:
     current_allocation[best_pfa_idx] += remainder
 
-# ==========================================
-# 4. FULL STOCHASTIC VALIDATION & DELTA
-# ==========================================
+# stochastic validation with noise and spillovers
 print("\nRunning stochastic validation...")
 n_months = len(t_forecast)
 sub_steps = 10
@@ -246,13 +237,11 @@ delta_df = pd.DataFrame({
 
 map_df = police_areas.merge(delta_df, on='PFA_Name')
 
-# 🚨 THE MASK: Overwrite Greater Manchester data with NaN so it renders black
+# Overwrite Greater Manchester data with NaN -> black
 map_df.loc[map_df['PFA_Name'] == 'Greater Manchester', 'Police_Delta'] = np.nan
 map_df.loc[map_df['PFA_Name'] == 'Greater Manchester', 'Crime_Delta'] = np.nan
 
-# ==========================================
-# 5. VISUALIZATION DASHBOARD
-# ==========================================
+# vis dashboard
 print("Rendering visualizations...")
 fig, axes = plt.subplots(2, 2, figsize=(20, 18))
 ax1, ax2 = axes[0, 0], axes[0, 1]
@@ -277,7 +266,7 @@ ax2.set_title(f'Net Staffing Change (3000 New + 5% Reallocation)', fontsize=14)
 ax2.set_xlabel('Net Change in Officers (From 2025)', fontsize=12)
 ax2.tick_params(axis='y', labelsize=8)
 
-# 🚨 ANCHOR THE COLOR MAPS TO ZERO 🚨
+
 # Calculate symmetric bounds using the absolute max value (ignoring NaNs)
 max_p_delta = map_df['Police_Delta'].abs().max()
 max_c_delta = map_df['Crime_Delta'].abs().max()

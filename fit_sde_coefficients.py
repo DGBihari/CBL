@@ -1,5 +1,5 @@
 """
-GOLDILOCKS SPATIO-TEMPORAL SDE (FITTING)
+FITTING SPATIO-TEMPORAL SDE
 Solves for Seasonal Amplitude (B_i) and Police Suppression (β_i)
 """
 
@@ -94,5 +94,5 @@ def apply_fitted_coefficients(ts_data: pd.DataFrame, alpha: np.ndarray, B_coeffs
     ts_data['B_i']     = ts_data['PFA_Name'].map(b_map).fillna(B_coeffs.mean())
     ts_data['Beta_i']  = ts_data['PFA_Name'].map(beta_map).fillna(beta_coeffs.mean())
 
-    print("\nGoldilocks Coefficients (α, B, β) successfully applied.")
+    print("\nCoefficients (α, B, β) successfully applied.")
     return ts_data

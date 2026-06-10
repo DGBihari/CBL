@@ -9,7 +9,7 @@ import geopandas as gpd
 warnings.filterwarnings('ignore')
 print("Initializing Fast Vectorized Comparative Policy Simulator...")
 
-# 🚨 MATCHED TO YOUR NEW MULTI-CRIME ENGINE 🚨
+# matched to your new multi-crime engine
 TARGET_CRIMES = [
     'anti_social_behaviour',
     'violence_and_sexual_offences'
@@ -23,9 +23,7 @@ num_realizations = 10000
 t_span = (0, 36)  # 3 Years: Jan 2025 to Jan 2028
 t_forecast = np.linspace(0, 36, 37)
 
-# ==========================================
-# 1. LOAD SDE & POLICE DATA
-# ==========================================
+# load data
 ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 ts_2025 = ts_data[ts_data['Year'] == 2025].copy()
 pfa_names = ts_2025['PFA_Name'].values
@@ -50,7 +48,7 @@ for pfa in pfa_names:
         static_val = max(ts_2025[ts_2025['PFA_Name'] == pfa]['Police_Count'].values[0], 1.0)
         police_extrapolators[pfa] = lambda t, v=static_val: v
 
-# Adjacency Mapping & Vectorized Spillover Matrix Build
+# adj mapping & vectorized spillover matrix build
 print("Building Geospatial Adjacency Matrix...")
 police_areas = gpd.read_file('../police_areas.geojson')
 police_areas['PFA_Name'] = police_areas['PFA24NM'].astype(str).str.strip()
@@ -76,9 +74,7 @@ for i in range(n_pfas):
         for j in neighbors_idx:
             SPILLOVER_WEIGHTS[i, j] = alpha_vec[j] / n_nb
 
-# ==========================================
-# 2. INGEST PROPHET FORECASTS (MULTI-CRIME & LINUX PATHS)
-# ==========================================
+# 2. prophet forecasts
 print("Fusing Prophet Machine Learning Forecasts...")
 cluster_mapping = {
     'Cluster_A': ['Greater Manchester', 'Merseyside', 'West Midlands', 'Metropolitan Police', 'West Yorkshire'],
@@ -126,9 +122,7 @@ for pfa in pfa_names:
     if not assigned:
         pfa_dF_dt.append(lambda t: 0.0)
 
-# ==========================================
-# 3 & 4. VECTORIZED DIFFERENCE-IN-DIFFERENCES ENGINE
-# ==========================================
+# vectorized difference in diff engine
 policy_name = "Housing First" if POLICY_HOUSING_FIRST else "Hotspot Policing" if POLICY_HOTSPOT_POLICING else "DV Mentoring"
 print(f"Running 5000 parallel realities: Status Quo vs. {policy_name}...")
 
@@ -150,19 +144,19 @@ for month_idx in range(1, n_months):
     for step in range(sub_steps):
         t_curr = (month_idx - 1) + step * dt
 
-        # Base Environment (Drift & Police)
+        # base environment (Drift & Police)
         drift = np.array([pfa_dF_dt[i](t_curr) for i in range(n_pfas)])
         P_curr = np.array([police_extrapolators[pfa_names[i]](t_curr) for i in range(n_pfas)])
         noise_scale = (P_curr ** -0.3) * 10.0 * sigma_vec
 
-        # Generate independent random shocks for Control and Policy universes
+        # generate independent random shocks for control and policy universes
         noise_ctrl = noise_scale * np.random.normal(0, np.sqrt(1 / 12), size=(num_realizations, n_pfas))
         noise_pol = noise_scale * np.random.normal(0, np.sqrt(1 / 12), size=(num_realizations, n_pfas))
 
-        # --- CONTROL UPDATE ---
+        # control update (Status Quo)
         E_ctrl += (drift + noise_ctrl) * dt
 
-        # --- POLICY UPDATE ---
+        # policy update (Intervention)
         alpha_prev = np.zeros_like(E_pol)
         beta_prev = np.zeros_like(E_pol)
         spillover_prev = np.zeros_like(E_pol)
@@ -173,12 +167,12 @@ for month_idx in range(1, n_months):
             alpha_prev = 0.77 * alpha_vec * E_pol
         if POLICY_HOTSPOT_POLICING:
             beta_prev = 0.60 * beta_vec * E_pol * (P_curr ** -0.3)
-            # Matrix dot-product completely replaces the slow GeoPandas for-loop
+            # Matrix dot-product for performance instead of slow loops 
             spillover_prev = 0.50 * (E_pol @ SPILLOVER_WEIGHTS.T)
 
         E_pol += (drift - alpha_prev - beta_prev - spillover_prev + noise_pol) * dt
 
-    # Log the national snapshot at the end of the month
+    # log the national snapshot at the end of the month
     monthly_control[month_idx, :] = E_ctrl.sum(axis=1)
     monthly_policy[month_idx, :] = E_pol.sum(axis=1)
 
@@ -186,18 +180,16 @@ c_arr, p_arr = monthly_control.T, monthly_policy.T
 c_mean, c_std = c_arr.mean(axis=0), c_arr.std(axis=0)
 p_mean, p_std = p_arr.mean(axis=0), p_arr.std(axis=0)
 
-# ==========================================
-# 5. VISUALIZATION
-# ==========================================
+# visualization 
 print("Rendering visualizations...")
 t_years = 2025 + t_forecast / 12.0
 fig, ax = plt.subplots(figsize=(14, 7))
 
-# Status Quo
+# status quo
 ax.plot(t_years, c_mean, color='#555555', linewidth=2.5, linestyle='--', label='Status Quo (Forecast Only)')
 ax.fill_between(t_years, c_mean - 1.96 * c_std, c_mean + 1.96 * c_std, color='#555555', alpha=0.15)
 
-# Intervention
+# intervention
 ax.plot(t_years, p_mean, color='#0072B2', linewidth=2.5, label=f'Intervention ({policy_name})')
 ax.fill_between(t_years, p_mean - 1.96 * p_std, p_mean + 1.96 * p_std, color='#0072B2', alpha=0.25,
                 label='95% Confidence Interval')
@@ -211,4 +203,4 @@ ax.set_xlim(2025, 2028)
 
 plt.tight_layout()
 plt.savefig('comparative_policy_simulation_2028.png', dpi=150, bbox_inches='tight')
-print("✅ Successfully saved: comparative_policy_simulation_2028.png")
+print("Successfully saved: comparative_policy_simulation_2028.png")

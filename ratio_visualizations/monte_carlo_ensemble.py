@@ -14,12 +14,10 @@ TARGET_CRIMES = [
     'violence_and_sexual_offences'
 ]
 num_realizations = 10000
-t_span = (0, 36) # 3 Years: Jan 2025 to Jan 2028
+t_span = (0, 36) # 3 Years: Jan 2025 to Jan 2028, 36 months
 t_forecast = np.linspace(0, 36, 37)
 
-# ==========================================
-# 1. LOAD HISTORICAL SDE DATA & COEFFICIENTS
-# ==========================================
+# load data & coefficients
 ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 ts_2025 = ts_data[ts_data['Year'] == 2025].copy()
 pfa_names = ts_2025['PFA_Name'].values
@@ -29,9 +27,7 @@ alpha_vec = ts_2025['Alpha_i'].values
 beta_vec = ts_2025['Beta_i'].values
 sigma_vec = ts_2025['Sigma_i'].values
 
-# ==========================================
-# 2. DYNAMIC POLICE EXTRAPOLATION
-# ==========================================
+# police extrapolation
 def make_extrapolator(poly_coeffs):
     return lambda t: max(np.polyval(poly_coeffs, 2025.0 + t / 12.0), 1.0)
 
@@ -45,9 +41,7 @@ for pfa in pfa_names:
         static_val = max(ts_2025[ts_2025['PFA_Name'] == pfa]['Police_Count'].values[0], 1.0)
         police_extrapolators[pfa] = lambda t, v=static_val: v
 
-# ==========================================
-# 3. INGEST PROPHET FORECASTS (MULTI-CRIME FUSION)
-# ==========================================
+# include prophet forecasts
 cluster_mapping = {
     'Cluster_A': ['Greater Manchester', 'Merseyside', 'West Midlands', 'Metropolitan Police', 'West Yorkshire'],
     'Cluster_B': ['Cleveland', 'Durham', 'Humberside', 'Northumbria', 'South Yorkshire'],
@@ -71,14 +65,13 @@ for cluster, pfas in cluster_mapping.items():
 
     for crime in TARGET_CRIMES:
 
-        # 🚨 FIX: Handle the folder vs file spelling difference 🚨
+        # check for spelling mistake
         if crime == 'anti_social_behaviour':
             file_crime_str = 'anti-social_behaviour'  # File has hyphen
         else:
             file_crime_str = crime
 
-        # Build the unbreakable absolute path
-        # Folder uses 'crime', File uses 'file_crime_str'
+        # fix path
         file_path = os.path.join(base_cbl_dir, "csv", crime,
                                  f"{cluster.replace('Cluster', 'cluster')}_{file_crime_str}.csv")
 
@@ -92,7 +85,7 @@ for cluster, pfas in cluster_mapping.items():
 
             combined_forecast += forecast_vals
         else:
-            print(f"⚠️ Warning: Could not find {file_path}")
+            print(f"Warning: Could not find {file_path}")
 
     # Calculate the gradient (dF/dt) on the final COMBINED curve
     dF_dt = np.gradient(combined_forecast)
@@ -110,9 +103,7 @@ for pfa in pfa_names:
     if not assigned:
         pfa_dF_dt.append(lambda t: 0.0)
 
-# ==========================================
-# 4. ODE SYSTEM
-# ==========================================
+# ode system
 n_pfas = len(pfa_names)
 def status_quo_ode(t, E_vec):
     dE = np.zeros(n_pfas)
@@ -124,25 +115,21 @@ def status_quo_ode(t, E_vec):
     return dE
 
 
-# ==========================================
-# 5. RUN ENSEMBLE
-# ==========================================
+# run ensemble
 print(f"Running {num_realizations} realizations...")
 all_solutions = []
 for i in range(num_realizations):
     sol = solve_ivp(status_quo_ode, t_span, E0, method='RK45', t_eval=t_forecast)
     all_solutions.append(sol.y.T.sum(axis=1))
 
-    # 🚨 Prints every single run 🚨
+    # Prints every single run
     print(f"  Completed {i + 1}/{num_realizations} runs...")
 
 arr = np.array(all_solutions)
 E_mean, E_std = arr.mean(axis=0), arr.std(axis=0)
 
 
-# ==========================================
-# 6. PLOT
-# ==========================================
+# plot
 t_years = 2025 + t_forecast / 12.0
 fig, ax = plt.subplots(figsize=(14, 7))
 

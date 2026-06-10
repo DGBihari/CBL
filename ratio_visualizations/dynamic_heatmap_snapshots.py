@@ -8,33 +8,27 @@ import warnings
 warnings.filterwarnings('ignore')
 print("Generating Animated Crime Derivative Heatmap...")
 
-# ==========================================
-# 1. LOAD DATA
-# ==========================================
+
 gdf = gpd.read_file('../police_areas.geojson')
 ts_data = pd.read_csv('../time_series_master_goldilocks.csv')
 
-# ==========================================
-# 2. CLEAN BOUNDARIES & NAMES
-# ==========================================
+# clean boundaries & names
 gdf['PFA24NM'] = gdf['PFA24NM'].astype(str).str.strip()
 gdf.loc[gdf['PFA24NM'].str.contains('Devon', case=False, na=False), 'PFA24NM'] = 'Devon and Cornwall'
 gdf.loc[gdf['PFA24NM'].str.contains('Hampshire', case=False, na=False), 'PFA24NM'] = 'Hampshire and Isle of Wight'
 
-# Add simplified names for guaranteed mapping
+# add simplified names for guaranteed mapping
 gdf['Simplified_Name'] = gdf['PFA24NM'].str.lower().str.replace('[^a-z]', '', regex=True)
 ts_data['Simplified_Name'] = ts_data['PFA_Name'].str.lower().str.replace('[^a-z]', '', regex=True)
 
-# Convert map index to string IDs
+# convert map index to string IDs
 gdf['id'] = gdf.index.astype(str)
 name_to_id = dict(zip(gdf['Simplified_Name'], gdf['id']))
 
-# ==========================================
-# 3. PREPARE THE TIMELINE & SCALES
-# ==========================================
+# timeline & scales
 ts_data['E_Prime_Monthly_Snapshot'] = ts_data['E_Prime_Monthly_Snapshot'].fillna(0)
 
-# Calculate global limits across all 5 years
+# calculate global limits across all 5 years
 max_val = max(abs(ts_data['E_Prime_Monthly_Snapshot'].min()), abs(ts_data['E_Prime_Monthly_Snapshot'].max()))
 limit = max_val + 1
 custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limit]
@@ -48,9 +42,7 @@ cmap = cm.StepColormap(
     caption="Crime Growth Rate (E'_i) [Blue = Decrease, Orange/Red = Increase]"
 )
 
-# ==========================================
-# 4. BUILD STYLE DICTIONARY
-# ==========================================
+# build style dict for colors
 style_dict = {}
 for _, row in ts_data.iterrows():
     sim_name = row['Simplified_Name']
@@ -62,8 +54,7 @@ for _, row in ts_data.iterrows():
             style_dict[region_id] = {}
             
         time_sec = pd.to_datetime(f"{int(row['Year'])}-01-01").timestamp()
-        
-        # 🚨 OVERRIDE: Force Greater Manchester to black due to missing data 🚨
+        # force GM to be colored black        
         if sim_name == 'greatermanchester':
             hex_color = '#000000'
         else:
@@ -74,9 +65,7 @@ for _, row in ts_data.iterrows():
             'opacity': 0.8
         }
 
-# ==========================================
-# 5. RENDER THE ANIMATED MAP
-# ==========================================
+# render map
 uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
 
 # Layer 1: The dynamic animated colors
@@ -99,4 +88,4 @@ folium.GeoJson(
 
 uk_map.add_child(cmap)
 uk_map.save('animated_timeline_2021_2025.html')
-print("✅ Saved bulletproof animated map to animated_timeline_2021_2025.html")
+print("Saved bulletproof animated map to animated_timeline_2021_2025.html")
