@@ -75,8 +75,9 @@ police_df['Police_Count'] = pd.to_numeric(police_df['Police_Count'].astype(str).
 ts_data = pd.merge(ts_data, police_df, on=['PFA_Name', 'Year'], how='left')
 ts_data['IMD_Score'] = ts_data['IMD_Score'].fillna(ts_data['IMD_Score'].mean())
 
-
-# read and consider crimes
+# ==========================================
+# 2. CRIME INGESTION
+# ==========================================
 use_cols = ['Month', 'Reported by', 'Crime type']
 target_crimes = ['Anti-social behaviour', 'Violence and sexual offences']
 crime_counts_list = []
@@ -102,8 +103,9 @@ ts_data = ts_data.sort_values(by=['PFA_Name', 'Year'])
 ts_data['Police_Count'] = ts_data.groupby('PFA_Name')['Police_Count'].transform(lambda g: g.interpolate(method='linear', limit_direction='both'))
 ts_data['Police_Count'] = ts_data['Police_Count'].fillna(ts_data['Police_Count'].mean())
 
-
-# coefficient fitting
+# ==========================================
+# 3. COEFFICIENT FITTING
+# ==========================================
 E_raw, months, e_pfa_names = build_E_data()
 master_pfas = get_master_pfa_list_from_lookup()
 E_data = align_to_master_pfa_list(E_raw, e_pfa_names, master_pfas)

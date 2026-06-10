@@ -27,7 +27,8 @@ def standardize_pfa_names(series):
     series = series.str.replace(' Service', '', regex=False)
     series.loc[series.str.contains('Metropolitan', case=False, na=False)] = 'Metropolitan Police'
     series.loc[series.str.contains('City of London', case=False, na=False)] = 'London, City of'
-    series.loc[series.str.contains('Devon', case=False, na=False)] = 'Devon and Cornwall' 
+    # fioxes
+    series.loc[series.str.contains('Devon', case=False, na=False)] = 'Devon and Cornwall' # do correct mapping for these, then series.replace?
     series.loc[series.str.contains('Hampshire', case=False, na=False)] = 'Hampshire and Isle of Wight'
     return series
 
@@ -42,6 +43,10 @@ def build_E_data(directory: str = CRIME_CSV_DIR):
             "Check that CRIME_CSV_DIR points to your crime data folder."
         )
 
+    print(f"Found {len(files)} CSV files across all month folders.")
+
+    # Read only the 3 columns we need, 43 forces × 60 months
+    # to do: remove :LSOA code if not needed, improved performance
     chunks = []
     for f in files:
         try:
@@ -72,9 +77,9 @@ def build_E_data(directory: str = CRIME_CSV_DIR):
               .sort_index()
     )
 
-    months    = pivot.index.tolist()       
+    months    = pivot.index.tolist()       # ['2021-01', '2021-02', ..., '2025-12']
     pfa_names = pivot.columns.tolist()
-    E_data    = pivot.values.astype(float) 
+    E_data    = pivot.values.astype(float) # (K_months, NR)
 
 
 
@@ -94,7 +99,7 @@ def align_to_master_pfa_list(E_data, e_pfa_names, master_pfa_names):
 
     return E_aligned
 
-
+# For testing, always run pipeline to actually run the main functionalities
 if __name__ == "__main__":
     E_data, months, pfa_names = build_E_data()
 

@@ -64,7 +64,7 @@ for _, row in ts_data.iterrows():
             'opacity': 0.8
         }
 
-# generate animated map
+# render map
 uk_map = folium.Map(location=[54.5, -3.0], zoom_start=6, tiles="cartodb positron")
 
 TimeSliderChoropleth(

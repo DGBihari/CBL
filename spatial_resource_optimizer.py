@@ -12,16 +12,17 @@ print("Initializing Refined Hybrid Shielded Spatial Optimizer...")
 
 TARGET_CRIMES = ['anti_social_behaviour', 'violence_and_sexual_offences']
 
-# --- OPTIMIZATION PARAMETERS ---
 TOTAL_NEW_OFFICERS = 3000
 KEEP_RATIO = 0.95
 BATCH_SIZE = 100
 num_realizations = 1000
 t_span = (0, 36)
 t_forecast = np.linspace(0, 36, 37)
+POLICY_STRENGTH = 0.30  # stronger so blue zones emerge more clearly
+
+# load sde & data
 POLICY_STRENGTH = 0.30  
 
-# load data & coefficients
 ts_data = pd.read_csv('time_series_master_goldilocks.csv')
 ts_2025 = ts_data[ts_data['Year'] == 2025].copy()
 pfa_names = ts_2025['PFA_Name'].values
@@ -69,7 +70,7 @@ for pfa in pfa_names:
         static_val = max(ts_2025[ts_2025['PFA_Name'] == pfa]['Police_Count'].values[0], 1.0)
         police_extrapolators[pfa] = lambda t, v=static_val: v
 
-# ingest prophet forecasts for each cluster and crime, then compute the combined derivative dF/dt for each cluster's forecast curve
+# Prophet
 cluster_mapping = {
     'Cluster_A': ['Greater Manchester', 'Merseyside', 'West Midlands', 'Metropolitan Police', 'West Yorkshire'],
     'Cluster_B': ['Cleveland', 'Durham', 'Humberside', 'Northumbria', 'South Yorkshire'],
@@ -116,11 +117,11 @@ for pfa in pfa_names:
             break
     if not assigned: pfa_dF_dt.append(lambda t: 0.0)
 
-# Calculate the base police allocation at the end of 2025 for each PFA, which serves as the anchor point for optimization
+# hybrid optimization engine
 base_police_end_2025 = np.array([police_extrapolators[pfa_names[i]](11) for i in range(n_pfas)])
 current_allocation = np.zeros(n_pfas)
 
-# London and Greater Manchester are locked at 100%
+# outliers like London + Manchester are fixed at 100%, no changes
 for i, pfa in enumerate(pfa_names):
     if pfa in ['Metropolitan Police', 'London, City of', 'Greater Manchester']:
         current_allocation[i] = base_police_end_2025[i]
@@ -160,7 +161,7 @@ for b in range(batches):
     lowest_cost = float('inf')
 
     for i in range(n_pfas):
-        # prevent Greater Manchester from receiving any new officers
+        # GM no new officers
         if pfa_names[i] == 'Greater Manchester':
             continue
 
@@ -263,6 +264,8 @@ ax2.set_title(f'Net Staffing Change (3000 New + 5% Reallocation)', fontsize=14)
 ax2.set_xlabel('Net Change in Officers (From 2025)', fontsize=12)
 ax2.tick_params(axis='y', labelsize=8)
 
+
+# Calculate symmetric bounds using the absolute max value (ignoring NaNs)
 max_p_delta = map_df['Police_Delta'].abs().max()
 max_c_delta = map_df['Crime_Delta'].abs().max()
 

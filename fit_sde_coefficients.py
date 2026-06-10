@@ -1,5 +1,5 @@
 """
-GOLDILOCKS SPATIO-TEMPORAL SDE (FITTING)
+FITTING SPATIO-TEMPORAL SDE
 Solves for Seasonal Amplitude (B_i) and Police Suppression (β_i)
 """
 

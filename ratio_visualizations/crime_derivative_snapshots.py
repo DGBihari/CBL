@@ -24,7 +24,7 @@ custom_bins = [-limit, -limit*0.66, -limit*0.33, 0, limit*0.33, limit*0.66, limi
 current_data = ts_data[ts_data['Year'] == 2025].copy()
 current_data['PFA_Name'] = current_data['PFA_Name'].astype(str).str.strip()
 
-# Fix City of London Map Hole
+# fix City of London Map
 met_data = current_data[current_data['PFA_Name'] == 'Metropolitan Police'].copy()
 met_data['PFA_Name'] = 'London, City of'
 current_data = pd.concat([current_data, met_data], ignore_index=True)

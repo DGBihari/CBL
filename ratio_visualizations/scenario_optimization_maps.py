@@ -19,12 +19,12 @@ police_areas.loc[police_areas['PFA24NM'].str.contains('Hampshire', case=False, n
 opt_data = ts_data[ts_data['Year'] == 2025].copy()
 opt_data['PFA_Name'] = opt_data['PFA_Name'].astype(str).str.strip()
 
-# calculate Leverage: How much does 1 extra officer reduce crime?
-# derivative of (-Beta * E * P^-0.3) with respect to P
+# calc leverage, how much does 1 extra officer reduce crime?
+# Derivative of (-Beta * E * P^-0.3) with respect to P, diminishing returns on police count
 opt_data['Optimization_Leverage'] = opt_data['Beta_i'] * opt_data['Crime_Count'] * 0.3 * (opt_data['Police_Count'] ** -1.3)
 
-# Handle missing PFAs by assigning them a leverage of 0 (or some default)
-# fix City of London Map Hole
+# clean data & apply overrides
+# Fix City of London Map Hole
 met_data = opt_data[opt_data['PFA_Name'] == 'Metropolitan Police'].copy()
 met_data['PFA_Name'] = 'London, City of'
 opt_data = pd.concat([opt_data, met_data], ignore_index=True)
